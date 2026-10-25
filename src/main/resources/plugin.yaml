@@ -16,7 +16,9 @@ spec:
   repo: https://github.com/webjing/obsidian-core
   issues: https://github.com/webjing/obsidian-core/issues
   displayName: "obsidian-core"
-  description: "obsidian-core - Halo 插件"
+  description: "obsidian-core - 双链笔记与知识图谱"
+  settingName: obsidian-core-settings
+  configMapName: obsidian-core-configmap
   license:
     - name: "GPL-3.0"
       url: "https://github.com/webjing/obsidian-core/blob/main/LICENSE"

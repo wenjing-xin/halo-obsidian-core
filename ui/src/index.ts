@@ -1,5 +1,5 @@
 import { definePlugin } from '@halo-dev/ui-shared'
-import { IconPlug } from '@halo-dev/components'
+import { IconDashboard, IconLink } from '@halo-dev/components'
 import { markRaw } from 'vue'
 
 export default definePlugin({
@@ -8,17 +8,35 @@ export default definePlugin({
     {
       parentName: 'Root',
       route: {
-        path: '/example',
-        name: 'Example',
-        component: () => import(/* webpackChunkName: "HomeView" */ './views/HomeView.vue'),
+        path: '/graphs',
+        name: 'ObsidianGraph',
+        component: () => import(/* webpackChunkName: "GraphView" */ './views/GraphView.vue'),
         meta: {
-          title: '示例页面',
+          title: '知识图谱',
           searchable: true,
           menu: {
-            name: '示例页面',
-            group: '示例分组',
-            icon: markRaw(IconPlug),
+            name: '知识图谱',
+            group: '知识图谱',
+            icon: markRaw(IconDashboard),
             priority: 0,
+          },
+        },
+      },
+    },
+    {
+      parentName: 'Root',
+      route: {
+        path: '/links',
+        name: 'ObsidianLinks',
+        component: () => import(/* webpackChunkName: "LinkView" */ './views/LinkView.vue'),
+        meta: {
+          title: '双链管理',
+          searchable: true,
+          menu: {
+            name: '双链管理',
+            group: '知识图谱',
+            icon: markRaw(IconLink),
+            priority: 1,
           },
         },
       },
