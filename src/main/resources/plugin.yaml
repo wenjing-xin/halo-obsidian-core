@@ -1,0 +1,22 @@
+# Refer https://docs.halo.run/developer-guide/plugin/basics/manifest
+
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  # The name defines how the plugin is invoked, A unique name
+  name: obsidian-core
+spec:
+  enabled: true
+  requires: ">=2.27.0"
+  author:
+    name: webjing
+    website: https://github.com/webjing
+  logo: logo.png
+  homepage: https://github.com/webjing/obsidian-core#readme
+  repo: https://github.com/webjing/obsidian-core
+  issues: https://github.com/webjing/obsidian-core/issues
+  displayName: "obsidian-core"
+  description: "obsidian-core - Halo 插件"
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/webjing/obsidian-core/blob/main/LICENSE"
