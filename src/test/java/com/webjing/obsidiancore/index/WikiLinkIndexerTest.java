@@ -61,7 +61,7 @@ class WikiLinkIndexerTest {
     @Test
     void updatedStructuredLinkMustKeepItsVersionAndNotCreateOrDelete() {
         when(content.getReleaseContent("source")).thenReturn(Mono.just(ContentWrapper.builder()
-            .raw("<p><a data-obsidian-post=\"target\" href=\"/old\">Old title</a></p>").build()));
+            .raw("<p><obsidian-core-link post=\"target\" url=\"/old\">Old title</obsidian-core-link></p>").build()));
         when(cache.resolveByName("target")).thenReturn(Mono.just(Optional.of(
             new PostLinkIndexCache.PostTarget("target", "New title", "/new"))));
         WikiLink existing = new WikiLink();

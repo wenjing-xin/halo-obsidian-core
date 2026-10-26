@@ -52,7 +52,7 @@ afterEach(() => {
   wrapper?.unmount()
   vi.clearAllMocks()
 })
-it('starts collapsed and exposes enlarged Halo refresh and tooltip-only playback buttons', async () => {
+it('starts collapsed and exposes uniformly sized standalone icon actions', async () => {
   wrapper = mount(GraphView, {
     global: {
       stubs: { FormKit: true },
@@ -62,7 +62,11 @@ it('starts collapsed and exposes enlarged Halo refresh and tooltip-only playback
   await flushPromises()
   expect(wrapper.find('aside').exists()).toBe(false)
   const refresh = wrapper.get('[aria-label="重新索引并刷新图谱"]')
-  expect(refresh.find('svg').classes()).toContain('!h-5')
+  expect(refresh.element.tagName).toBe('DIV')
+  expect(refresh.attributes('role')).toBe('button')
+  expect(refresh.classes()).toContain('graph-action-icon')
+  expect(wrapper.findAll('.graph-action-icon')).toHaveLength(7)
+  expect(wrapper.find('.graph-action-icon button').exists()).toBe(false)
   expect(refresh.attributes('data-tooltip')).toBe('重新索引并刷新图谱')
   const play = wrapper.get('[aria-label="播放关系图谱生成动画"]')
   expect(play.text()).toBe('')

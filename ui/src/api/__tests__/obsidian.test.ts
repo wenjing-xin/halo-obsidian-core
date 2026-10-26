@@ -1,10 +1,15 @@
-import { expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 const { listPosts } = vi.hoisted(() => ({ listPosts: vi.fn() }))
 vi.mock('@halo-dev/api-client', () => ({
   axiosInstance: {},
   consoleApiClient: { content: { post: { listPosts } } },
 }))
 import { searchPostBriefs } from '../obsidian'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
+
 it('uses the keyword-aware Console endpoint and unwraps ListedPost', async () => {
   listPosts.mockResolvedValue({
     data: {
@@ -25,6 +30,7 @@ it('uses the keyword-aware Console endpoint and unwraps ListedPost', async () =>
   expect(listPosts).toHaveBeenCalledWith({
     keyword: 'Article',
     size: 20,
+    publishPhase: undefined,
     fieldSelector: ['spec.deleted=false'],
   })
 })
@@ -46,6 +52,19 @@ it('excludes the current article and non-navigable drafts in the link picker', a
   expect(listPosts).toHaveBeenLastCalledWith({
     size: 20,
     keyword: undefined,
-    fieldSelector: ['spec.deleted=false', 'metadata.name!=current', 'spec.publish=true'],
+    publishPhase: 'PUBLISHED',
+    fieldSelector: ['spec.deleted=false', 'metadata.name!=current'],
+  })
+})
+
+it('uses the supported publish phase for published-only keyword searches', async () => {
+  listPosts.mockResolvedValue({ data: { items: [] } })
+
+  expect(await searchPostBriefs(' Article ', { publishedOnly: true })).toEqual([])
+  expect(listPosts).toHaveBeenCalledExactlyOnceWith({
+    size: 20,
+    keyword: 'Article',
+    publishPhase: 'PUBLISHED',
+    fieldSelector: ['spec.deleted=false'],
   })
 })

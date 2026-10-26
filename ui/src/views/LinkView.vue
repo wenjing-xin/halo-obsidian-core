@@ -14,6 +14,7 @@ import {
   type WikiLinkEntry,
 } from '../api/obsidian'
 import BrokenLinksTable from '../components/BrokenLinksTable.vue'
+import PostRelationList, { type RelationPostRow } from '../components/PostRelationList.vue'
 import type { BacklinkItem, GraphSummary, UnresolvedItem } from '../shared/graph-renderer/types'
 
 const activeTab = ref('backlinks')
@@ -40,7 +41,40 @@ const outgoingUnresolved = ref<WikiLinkEntry[]>([])
 const reindexing = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-const codeClass = 'rounded bg-gray-100 px-1 py-0.5 font-mono text-[11px] text-gray-700'
+const searchRows = computed<RelationPostRow[]>(() =>
+  postResults.value.map((post) => ({ ...post, key: post.name })),
+)
+const backlinkRows = computed<RelationPostRow[]>(() =>
+  backlinks.value.map((item) => ({
+    key: item.sourcePostName,
+    name: item.sourcePostName,
+    title: item.sourceTitle,
+    permalink: item.sourcePermalink,
+    snippet: item.snippet,
+    status: 'backlink',
+  })),
+)
+const outgoingRows = computed<RelationPostRow[]>(() =>
+  outgoingLinks.value.map((item, index) => ({
+    key: `${item.targetPostName}-${index}`,
+    name: item.targetPostName,
+    title: item.targetTitle,
+    snippet: item.snippet,
+    status: 'resolved',
+  })),
+)
+const selectedBroken = computed<UnresolvedItem[]>(() =>
+  outgoingUnresolved.value.map((item) => ({
+    sourcePostName: selectedPost.value?.name || '',
+    sourceTitle: selectedPost.value?.title || '',
+    targetTitle: item.targetTitle,
+    snippet: item.snippet || '',
+  })),
+)
+function selectRow(row: RelationPostRow) {
+  if (row.name)
+    void selectPost({ name: row.name, title: row.title, permalink: row.permalink || undefined })
+}
 
 async function loadSummary() {
   try {
@@ -216,14 +250,11 @@ const statCards = computed(() => [
       <template #description>
         <div class="flex flex-col gap-1 text-xs leading-5">
           <p class="m-0">
-            在 Markdown 编辑器中使用 <code :class="codeClass">[[文章标题]]</code> 创建双链，支持
-            <code :class="codeClass">[[文章标题|显示别名]]</code> 自定义链接文本，以及
-            <code :class="codeClass">[[文章标题#小节标题]]</code> 定位到目标文章的小节。
+            Markdown 用户：在「文章」列表的下拉菜单中点击<strong>复制双链标签</strong>，将复制的
+            <code>obsidian-core-link</code> 标签直接粘贴到正文；不要放进代码块。
           </p>
           <p class="m-0">
-            注意：文章<strong>发布后</strong>才会建立双链索引；默认按标题匹配且不区分大小写（可在插件设置中调整）；
-            未匹配到任何已发布文章的
-            <code :class="codeClass">[[ ]]</code> 会保留原文并计入「断链检测」。
+            默认编辑器用户：通过「文章关联」选择目标文章。标签使用文章标识建立关系，不依赖标题；来源和目标文章发布后同步索引。
           </p>
         </div>
       </template>
@@ -302,33 +333,21 @@ const statCards = computed(() => [
           </div>
         </template>
 
-        <VLoading v-if="searching" />
-        <ul
-          v-else-if="!selectedPost && postResults.length"
-          class="m-0 max-h-60 list-none overflow-y-auto p-0 py-1"
-        >
-          <li
-            v-for="post in postResults"
-            :key="post.name"
-            class="cursor-pointer px-4 py-2.5 text-[13px] hover:bg-gray-100"
-            @click="selectPost(post)"
-          >
-            {{ post.title }}
-          </li>
-        </ul>
-
-        <VEmpty
-          v-else-if="!selectedPost && keyword.trim()"
-          title="未找到文章"
-          message="尝试其他标题关键词；索引仅包含已发布内容。"
+        <PostRelationList
+          v-if="!selectedPost"
+          :items="searchRows"
+          :loading="searching"
+          selectable
+          :empty-title="keyword.trim() ? '未找到文章' : '选择一篇文章'"
+          :empty-message="
+            keyword.trim()
+              ? '尝试其他标题关键词；索引仅包含已发布内容。'
+              : '输入文章标题，查看其反向链接和出链。'
+          "
+          @select="selectRow"
         />
-        <VEmpty
-          v-else-if="!selectedPost"
-          title="选择一篇文章"
-          message="输入文章标题，查看其反向链接和出链。"
-        />
-        <div v-if="selectedPost" class="px-4 pb-4 pt-3">
-          <div class="mb-2.5 flex items-center justify-between">
+        <div v-if="selectedPost" class="pb-4 pt-3">
+          <div class="mb-2.5 flex items-center justify-between px-4">
             <span class="text-[15px] font-semibold">{{ selectedPost.title }}</span>
             <VButton size="sm" @click="selectedPost = null">切换文章</VButton>
           </div>
@@ -337,65 +356,30 @@ const statCards = computed(() => [
 
           <template v-else>
             <section class="mt-3.5">
-              <h4 class="mb-2 mt-0 text-[13px] font-normal text-gray-600">
+              <h4 class="mb-2 mt-0 px-4 text-[13px] font-normal text-gray-600">
                 反向链接（{{ backlinks.length }}）
               </h4>
-              <VEmpty
-                v-if="!backlinks.length"
-                title="暂无反向链接"
-                message="没有其他文章链接到本文。"
+              <PostRelationList
+                :items="backlinkRows"
+                empty-title="暂无反向链接"
+                empty-message="其他文章插入本文的双链标签后，会显示在这里。"
               />
-              <ul v-else class="m-0 flex list-none flex-col gap-1.5 p-0">
-                <li
-                  v-for="item in backlinks"
-                  :key="item.sourcePostName"
-                  class="flex flex-col gap-0.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
-                >
-                  <span class="text-[13px] font-medium">{{ item.sourceTitle }}</span>
-                  <span v-if="item.snippet" class="text-xs text-gray-400">{{ item.snippet }}</span>
-                </li>
-              </ul>
             </section>
-
             <section class="mt-3.5">
-              <h4 class="mb-2 mt-0 text-[13px] font-normal text-gray-600">
+              <h4 class="mb-2 mt-0 px-4 text-[13px] font-normal text-gray-600">
                 出链（{{ outgoingLinks.length }}）
               </h4>
-              <VEmpty
-                v-if="!outgoingLinks.length"
-                title="暂无出链"
-                message="本文没有解析成功的 [[双链]]。"
+              <PostRelationList
+                :items="outgoingRows"
+                empty-title="暂无出链"
+                empty-message="本文没有解析成功的双链标签。"
               />
-              <ul v-else class="m-0 flex list-none flex-col gap-1.5 p-0">
-                <li
-                  v-for="(entry, index) in outgoingLinks"
-                  :key="index"
-                  class="flex flex-col gap-0.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
-                >
-                  <span class="text-[13px] font-medium">{{ entry.targetTitle }}</span>
-                  <span v-if="entry.snippet" class="text-xs text-gray-400">{{
-                    entry.snippet
-                  }}</span>
-                </li>
-              </ul>
             </section>
-
-            <section v-if="outgoingUnresolved.length" class="mt-3.5">
-              <h4 class="mb-2 mt-0 text-[13px] font-normal text-gray-600">
-                未解析（{{ outgoingUnresolved.length }}）
+            <section v-if="selectedBroken.length" class="mt-3.5">
+              <h4 class="mb-2 mt-0 px-4 text-[13px] font-normal text-gray-600">
+                未解析（{{ selectedBroken.length }}）
               </h4>
-              <ul class="m-0 flex list-none flex-col gap-1.5 p-0">
-                <li
-                  v-for="(entry, index) in outgoingUnresolved"
-                  :key="index"
-                  class="flex flex-col gap-0.5 rounded-md border border-[rgba(224,90,90,0.35)] bg-gray-50 px-3 py-2"
-                >
-                  <span class="text-[13px] font-medium">[[{{ entry.targetTitle }}]]</span>
-                  <span v-if="entry.snippet" class="text-xs text-gray-400">{{
-                    entry.snippet
-                  }}</span>
-                </li>
-              </ul>
+              <BrokenLinksTable :items="selectedBroken" />
             </section>
           </template>
         </div>
@@ -407,9 +391,11 @@ const statCards = computed(() => [
         v-if="unresolved.length"
         type="warning"
         :closable="false"
-        title="以下 [[双链]] 未解析到任何文章"
+        title="以下关联尚未解析到目标文章，请检查目标是否已发布或已删除"
       />
-      <BrokenLinksTable :items="unresolved" :loading="unresolvedLoading" />
+      <VCard class="mt-3" :body-class="['!p-0']">
+        <BrokenLinksTable :items="unresolved" :loading="unresolvedLoading" />
+      </VCard>
     </div>
   </div>
 </template>

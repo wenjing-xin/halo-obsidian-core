@@ -2,9 +2,9 @@ package com.webjing.obsidiancore.index;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Locale;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.webjing.obsidiancore.link.StructuredLinkTag;
 
 /**
  * <p>Pure-function parser for {@code [[...]]} wikilinks in raw content. Works for both
@@ -23,20 +23,13 @@ public final class WikiLinkParser {
     }
 
     /**
-     * One wikilink occurrence found in the raw content. For structured anchor
-     * links ({@code <a data-obsidian-post="...">}) the target post is pinned by
+     * One wikilink occurrence found in the raw content. For structured article
+     * links ({@code <obsidian-core-link post="...">}) the target post is pinned by
      * {@code postName} and resolved by name instead of by title.
      */
     public record Occurrence(String target, String alias, String heading, String snippet,
                              int start, int end, String postName) {
     }
-
-    /**
-     * Structured anchor link inserted by the editor "文章关联" action.
-     */
-    private static final Pattern ANCHOR_LINK = Pattern.compile(
-        "<a\\b[^>]*\\bdata-obsidian-post\\s*=\\s*\"([^\"]*)\"[^>]*>(.*?)</a>",
-        Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     private static final char[] FENCE_CHARS = {'`', '~'};
 
@@ -51,8 +44,9 @@ public final class WikiLinkParser {
         if (raw == null || raw.isEmpty()) {
             return occurrences;
         }
-        parseAnchorLinks(raw, occurrences);
-        String text = stripHtmlNoTouchRegions(raw);
+        String indexable = WikiLinkContentMask.mask(raw);
+        parseAnchorLinks(indexable, occurrences);
+        String text = stripHtmlNoTouchRegions(indexable);
         int lineStart = 0;
         boolean inFence = false;
         char fenceChar = 0;
@@ -68,7 +62,7 @@ public final class WikiLinkParser {
             if (!inFence) {
                 if (fenceRun >= 3) {
                     inFence = true;
-                    fenceChar = trimmed.charAt(countLeadingWhitespace(line));
+                    fenceChar = trimmed.charAt(0);
                     fenceLength = fenceRun;
                 } else {
                     parseLine(line, lineStart, occurrences);
@@ -91,48 +85,17 @@ public final class WikiLinkParser {
         return occurrences;
     }
 
-    /**
-     * Collect structured anchor links ({@code <a data-obsidian-post="...">text</a>})
-     * from the original raw content. These anchors are excluded from the
-     * {@code [[...]]} scan because plain {@code <a>} regions are no-touch, so
-     * they are extracted here on the untouched raw.
-     */
+    /** Index only article-bound custom tags; URL-only tags remain ordinary hyperlinks. */
     private static void parseAnchorLinks(String raw, List<Occurrence> occurrences) {
-        if (!raw.contains("data-obsidian-post")) {
-            return;
+        for (var link : StructuredLinkTag.find(raw)) {
+            if (link.post().isBlank()) continue;
+            String context = raw.substring(Math.max(0, link.start() - 60),
+                Math.min(raw.length(), link.end() + 60));
+            String snippet = StructuredLinkTag.plainText(context);
+            if (snippet.length() > 140) snippet = snippet.substring(0, 140);
+            occurrences.add(new Occurrence(link.title(), link.text(), null, snippet,
+                link.start(), link.end(), link.post()));
         }
-        Matcher matcher = ANCHOR_LINK.matcher(raw);
-        while (matcher.find()) {
-            String postName = matcher.group(1).strip();
-            if (postName.isEmpty()) {
-                continue;
-            }
-            String innerText = unescape(stripTags(matcher.group(2))).strip();
-            if (innerText.isEmpty()) {
-                innerText = postName;
-            }
-            String context = raw.substring(Math.max(0, matcher.start() - 60),
-                Math.min(raw.length(), matcher.end() + 60));
-            String snippet = unescape(stripTags(context)).replaceAll("\\s+", " ").strip();
-            if (snippet.length() > 140) {
-                snippet = snippet.substring(0, 140);
-            }
-            occurrences.add(new Occurrence(innerText, innerText, null, snippet,
-                matcher.start(), matcher.end(), postName));
-        }
-    }
-
-    private static String stripTags(String html) {
-        return html.replaceAll("<[^>]*>", " ");
-    }
-
-    private static String unescape(String text) {
-        return text.replace("&nbsp;", " ")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("&amp;", "&");
     }
 
     private static int countLeadingWhitespace(String line) {
@@ -188,7 +151,7 @@ public final class WikiLinkParser {
                 boolean closing = tag.startsWith("/");
                 if (!closing && isNoTouchTag(name)) {
                     String closeTag = "</" + name;
-                    int close = raw.toLowerCase().indexOf(closeTag, gt);
+                    int close = raw.toLowerCase(Locale.ROOT).indexOf(closeTag, gt);
                     i = close < 0 ? len : indexAfterClose(raw, close);
                     sb.append(' ');
                     continue;
@@ -224,7 +187,7 @@ public final class WikiLinkParser {
 
     private static boolean isNoTouchTag(String name) {
         return switch (name) {
-            case "pre", "code", "a", "script", "style" -> true;
+            case "pre", "code", "a", "obsidian-core-link", "script", "style" -> true;
             default -> false;
         };
     }

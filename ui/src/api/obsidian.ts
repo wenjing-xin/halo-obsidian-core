@@ -176,10 +176,11 @@ export async function searchPostBriefs(
   const { data } = await consoleApiClient.content.post.listPosts({
     size: 20,
     keyword: keyword.trim() || undefined,
+    // Halo 2.27 has no spec.publish index; Console translates this phase into a label selector.
+    publishPhase: options.publishedOnly ? 'PUBLISHED' : undefined,
     fieldSelector: [
       'spec.deleted=false',
       ...(options.excludePostName ? [`metadata.name!=${options.excludePostName}`] : []),
-      ...(options.publishedOnly ? ['spec.publish=true'] : []),
     ],
   })
   return (data.items ?? []).map(({ post }) => ({

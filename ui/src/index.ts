@@ -4,6 +4,7 @@ import { IconDashboard } from '@halo-dev/components'
 import { markRaw } from 'vue'
 import { GraphNode } from './editor/graph-node'
 import { ObsidianLink } from './editor/obsidian-link'
+import { createPostOperations } from './extensions/post-operations'
 
 export default definePlugin({
   components: {},
@@ -28,6 +29,7 @@ export default definePlugin({
     },
   ],
   extensionPoints: {
+    'post:list-item:operation:create': createPostOperations,
     'default:editor:extension:create': () => [GraphNode, ObsidianLink],
   },
 })

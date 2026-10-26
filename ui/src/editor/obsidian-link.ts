@@ -1,9 +1,17 @@
-import { Node, Plugin, ToolboxItem, mergeAttributes, type Editor, type Transaction } from '@halo-dev/richtext-editor'
+import {
+  Node,
+  Plugin,
+  ToolboxItem,
+  mergeAttributes,
+  type Editor,
+  type Transaction,
+} from '@halo-dev/richtext-editor'
 import { IconLink } from '@halo-dev/components'
 import { markRaw } from 'vue'
 import type { PostBrief } from '../api/obsidian'
 import { openPostLinkPicker } from './post-link-picker'
 import { currentPostName } from './picker-position'
+import { safePostPermalink } from '../shared/wikilink-tag'
 import '../../../src/main/resources/static/obsidian-links.css'
 
 const NODE_NAME = 'obsidianLink'
@@ -13,21 +21,25 @@ const NODE_NAME = 'obsidianLink'
  * `[[title]]` wikilink syntax it stores the target's `metadata.name`, so the
  * relation survives target renames and never depends on title matching.
  *
- * Serializes to `<a data-obsidian-post="..." href="...">text</a>`; the backend
- * indexer resolves `data-obsidian-post` directly and the theme-side content
- * handler keeps `href` fresh.
+ * Serializes to `<obsidian-core-link post="..." url="..." title="...">text</obsidian-core-link>`.
+ * The backend resolves the stable post identity and emits an accessible anchor.
  *
  * Insertion entries:
  * - editor toolbox ("文章关联")
  * - slash command ("/文章关联")
  */
-function insertPostLink(editor: Editor, post: PostBrief, text: string, range: { from: number; to: number }) {
+function insertPostLink(
+  editor: Editor,
+  post: PostBrief,
+  text: string,
+  range: { from: number; to: number },
+) {
   editor
     .chain()
     .focus()
     .insertContentAt(range, {
       type: NODE_NAME,
-      attrs: { postName: post.name, permalink: post.permalink || '' },
+      attrs: { postName: post.name, permalink: post.permalink || '', title: post.title },
       content: [{ type: 'text', text: text || post.title }],
     })
     .run()
@@ -45,7 +57,10 @@ function promptAndInsert(editor: Editor) {
     editor.off('transaction', track)
     editor.off('destroy', onDestroy)
   }
-  const onDestroy = () => { dispose?.(); cleanup() }
+  const onDestroy = () => {
+    dispose?.()
+    cleanup()
+  }
   editor.on('transaction', track)
   editor.on('destroy', onDestroy)
   dispose = openPostLinkPicker({
@@ -71,16 +86,24 @@ export const ObsidianLink = Node.create({
   priority: 2000,
 
   addProseMirrorPlugins() {
-    return [new Plugin({ props: { handleClick: (_view, _pos, event) => {
-      const anchor = event.target instanceof Element
-        ? event.target.closest<HTMLAnchorElement>('a[data-obsidian-post]') : null
-      if (!anchor?.getAttribute('href')) return false
-      const target = new URL(anchor.href, document.baseURI)
-      if (!['http:', 'https:'].includes(target.protocol)) return false
-      event.preventDefault()
-      window.open(target.href, '_blank', 'noopener,noreferrer')
-      return true
-    } } })]
+    return [
+      new Plugin({
+        props: {
+          handleClick: (_view, _pos, event) => {
+            const link =
+              event.target instanceof Element
+                ? event.target.closest<HTMLElement>('obsidian-core-link')
+                : null
+            const url = safePostPermalink(link?.getAttribute('url'))
+            if (!url) return false
+            event.preventDefault()
+            const target = link?.getAttribute('target') === '_self' ? '_self' : '_blank'
+            window.open(new URL(url, document.baseURI).href, target, 'noopener,noreferrer')
+            return true
+          },
+        },
+      }),
+    ]
   },
 
   addOptions() {
@@ -118,43 +141,39 @@ export const ObsidianLink = Node.create({
     return {
       postName: {
         default: '',
-        parseHTML: (element: HTMLElement) =>
-          element.getAttribute('data-obsidian-post') || '',
-        renderHTML: (attributes: Record<string, any>) => ({
-          'data-obsidian-post': attributes.postName,
-        }),
+        parseHTML: (element: HTMLElement) => element.getAttribute('post') || '',
+        renderHTML: (attributes: Record<string, unknown>) => ({ post: attributes.postName }),
       },
       permalink: {
         default: '',
-        parseHTML: (element: HTMLElement) => element.getAttribute('href') || '',
-        renderHTML: (attributes: Record<string, any>) =>
-          attributes.permalink ? { href: attributes.permalink } : {},
+        parseHTML: (element: HTMLElement) => safePostPermalink(element.getAttribute('url')) || '',
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const url = safePostPermalink(String(attributes.permalink || ''))
+          return url ? { url } : {}
+        },
+      },
+      title: {
+        default: '',
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('title') || element.textContent || '',
+      },
+      target: {
+        default: '_blank',
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('target') === '_self' ? '_self' : '_blank',
       },
     }
   },
 
   parseHTML() {
-    return [
-      {
-        tag: 'a[data-obsidian-post]',
-        getAttrs: (element: HTMLElement) => {
-          return element.getAttribute('data-obsidian-post')?.trim() ? null : false
-        },
-      },
-    ]
+    return [{ tag: 'obsidian-core-link' }]
   },
 
-  renderHTML({
-    node,
-    HTMLAttributes,
-  }: {
-    node: any
-    HTMLAttributes: Record<string, unknown>
-  }) {
-    void node
-    return ['a', mergeAttributes({
-      class: 'obsidian-wikilink obsidian-post-link',
-      target: '_blank', rel: 'noopener noreferrer', title: '打开关联文章',
-    }, HTMLAttributes), 0]
+  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, unknown> }) {
+    return [
+      'obsidian-core-link',
+      mergeAttributes({ class: 'obsidian-post-link' }, HTMLAttributes),
+      0,
+    ]
   },
 })

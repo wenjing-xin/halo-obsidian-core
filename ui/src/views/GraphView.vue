@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import {
-  IconRefreshLine,
-  VAlert,
-  VButton,
-  VEmpty,
-  VLoading,
-  VModal,
-  VSwitch,
-} from '@halo-dev/components'
+import { IconRefreshLine, VAlert, VEmpty, VLoading, VModal, VSwitch } from '@halo-dev/components'
 import IconPlayLine from '~icons/ri/play-line'
+import IconSettingsLine from '~icons/ri/settings-3-line'
+import IconFullscreenLine from '~icons/ri/fullscreen-line'
+import IconCloseLine from '~icons/ri/close-line'
+import IconAddLine from '~icons/ri/add-line'
+import IconSubtractLine from '~icons/ri/subtract-line'
+import GraphActionIcon from '../components/GraphActionIcon.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   fetchCategoryOptions,
@@ -101,17 +99,6 @@ const summary = ref<Awaited<ReturnType<typeof fetchSummary>>['data'] | null>(nul
 // ---------------------------------------------------------------------------
 // UnoCSS class groups (light/dark aware)
 // ---------------------------------------------------------------------------
-
-const iconBtnClass = computed(() => [
-  'inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border p-0 backdrop-blur-md transition-colors disabled:cursor-default disabled:opacity-50',
-  visual.dark
-    ? 'border-white/10 bg-neutral-800/85 text-gray-400 hover:bg-neutral-700/95 hover:text-gray-200'
-    : 'border-slate-900/[0.08] bg-white/85 text-gray-500 hover:bg-white hover:text-gray-900',
-])
-
-const haloIconBtnClass = computed(() => [...iconBtnClass.value, '!h-9 !w-9 !min-w-0 !p-0'])
-
-const zoomBtnClass = computed(() => [...iconBtnClass.value, 'text-sm'])
 
 const panelClass = computed(() => [
   'absolute bottom-3 right-3 top-3 z-[5] flex w-[264px] flex-col overflow-hidden rounded-[10px] border shadow-lg backdrop-blur-lg',
@@ -285,7 +272,7 @@ onBeforeUnmount(() => {
         v-else-if="payload && !payload.nodes.length"
         :class="emptyClass"
         title="暂无图谱数据"
-        message="发布包含 [[双链]] 的文章后，这里会展示关系图谱。"
+        message="发布包含双链标签的文章后，这里会展示关系图谱。"
       />
       <ObsidianGraphCanvas
         ref="canvasRef"
@@ -310,134 +297,47 @@ onBeforeUnmount(() => {
         节点较多，已截断展示。可使用筛选或调大设置中的节点上限。
       </div>
 
-      <!-- Obsidian-style collapsed floating controls -->
       <div v-if="!panelOpen" class="absolute right-3 top-3 z-[5] flex flex-col items-end gap-2">
-        <VButton
-          v-tooltip="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'"
-          :class="haloIconBtnClass"
-          size="sm"
+        <GraphActionIcon
+          :label="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'"
+          :dark="visual.dark"
           :disabled="reindexing"
-          :aria-busy="reindexing"
-          aria-label="重新索引并刷新图谱"
-          @click="reindex"
+          :busy="reindexing"
+          @activate="reindex"
         >
-          <template #icon
-            ><IconRefreshLine :class="['!h-5 !w-5 !text-xl', { 'animate-spin': reindexing }]"
-          /></template>
-        </VButton>
-        <button
-          type="button"
-          :class="iconBtnClass"
-          v-tooltip="'图谱设置'"
-          aria-label="图谱设置"
+          <IconRefreshLine :class="{ 'animate-spin': reindexing }" />
+        </GraphActionIcon>
+        <GraphActionIcon
+          label="图谱设置"
+          :dark="visual.dark"
           :aria-expanded="panelOpen"
-          @click="panelOpen = true"
-        >
-          <svg
-            class="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="3" />
-            <path
-              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          :class="iconBtnClass"
-          v-tooltip="'放大图谱'"
-          aria-label="放大图谱"
-          @click="enlarged = true"
-        >
-          <svg
-            class="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
-            />
-          </svg>
-        </button>
-        <VButton
-          v-tooltip="'播放关系图谱生成动画'"
-          :class="haloIconBtnClass"
-          size="sm"
-          aria-label="播放关系图谱生成动画"
-          @click="replay"
-        >
-          <template #icon><IconPlayLine class="!h-5 !w-5 !text-xl" /></template>
-        </VButton>
+          @activate="panelOpen = true"
+          ><IconSettingsLine
+        /></GraphActionIcon>
+        <GraphActionIcon label="放大图谱" :dark="visual.dark" @activate="enlarged = true"
+          ><IconFullscreenLine
+        /></GraphActionIcon>
+        <GraphActionIcon label="播放关系图谱生成动画" :dark="visual.dark" @activate="replay"
+          ><IconPlayLine
+        /></GraphActionIcon>
       </div>
 
-      <!-- Obsidian-style settings panel -->
       <aside v-else :class="panelClass">
-        <div class="flex items-center justify-end px-2.5 pb-1 pt-2">
-          <div class="inline-flex gap-1.5">
-            <VButton
-              v-tooltip="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'"
-              :class="haloIconBtnClass"
-              size="sm"
-              :disabled="reindexing"
-              :aria-busy="reindexing"
-              aria-label="重新索引并刷新图谱"
-              @click="reindex"
-            >
-              <template #icon
-                ><IconRefreshLine :class="['!h-5 !w-5 !text-xl', { 'animate-spin': reindexing }]"
-              /></template>
-            </VButton>
-            <button
-              type="button"
-              :class="iconBtnClass"
-              v-tooltip="'放大图谱'"
-              aria-label="放大图谱"
-              @click="enlarged = true"
-            >
-              <svg
-                class="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path
-                  d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
-                />
-              </svg>
-            </button>
-            <button
-              type="button"
-              :class="iconBtnClass"
-              v-tooltip="'收起面板'"
-              aria-label="收起面板"
-              @click="panelOpen = false"
-            >
-              <svg
-                class="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        <div class="flex items-center justify-end gap-1.5 px-2.5 pb-1 pt-2">
+          <GraphActionIcon
+            :label="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'"
+            :dark="visual.dark"
+            :disabled="reindexing"
+            :busy="reindexing"
+            @activate="reindex"
+            ><IconRefreshLine :class="{ 'animate-spin': reindexing }"
+          /></GraphActionIcon>
+          <GraphActionIcon label="放大图谱" :dark="visual.dark" @activate="enlarged = true"
+            ><IconFullscreenLine
+          /></GraphActionIcon>
+          <GraphActionIcon label="收起面板" :dark="visual.dark" @activate="panelOpen = false"
+            ><IconCloseLine
+          /></GraphActionIcon>
         </div>
 
         <div class="flex-1 overflow-y-auto pb-2.5">
@@ -576,15 +476,9 @@ onBeforeUnmount(() => {
                 step="1"
                 label="连线粗细"
               />
-              <VButton
-                v-tooltip="'播放关系图谱生成动画'"
-                :class="haloIconBtnClass"
-                size="sm"
-                aria-label="播放关系图谱生成动画"
-                @click="replay"
-              >
-                <template #icon><IconPlayLine class="!h-5 !w-5 !text-xl" /></template>
-              </VButton>
+              <GraphActionIcon label="播放关系图谱生成动画" :dark="visual.dark" @activate="replay"
+                ><IconPlayLine
+              /></GraphActionIcon>
             </div>
           </section>
 
@@ -649,33 +543,15 @@ onBeforeUnmount(() => {
         class="absolute bottom-3 z-[4] flex flex-col gap-1.5"
         :class="panelOpen ? 'right-[288px]' : 'right-3'"
       >
-        <button
-          type="button"
-          :class="zoomBtnClass"
-          v-tooltip="'放大'"
-          aria-label="放大"
-          @click="zoom(1.25)"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          :class="zoomBtnClass"
-          v-tooltip="'缩小'"
-          aria-label="缩小"
-          @click="zoom(0.8)"
-        >
-          −
-        </button>
-        <VButton
-          v-tooltip="'重置视图'"
-          :class="haloIconBtnClass"
-          size="sm"
-          aria-label="重置视图"
-          @click="resetView"
-        >
-          <template #icon><IconRefreshLine class="!h-5 !w-5 !text-xl" /></template>
-        </VButton>
+        <GraphActionIcon label="放大" :dark="visual.dark" @activate="zoom(1.25)"
+          ><IconAddLine
+        /></GraphActionIcon>
+        <GraphActionIcon label="缩小" :dark="visual.dark" @activate="zoom(0.8)"
+          ><IconSubtractLine
+        /></GraphActionIcon>
+        <GraphActionIcon label="重置视图" :dark="visual.dark" @activate="resetView"
+          ><IconRefreshLine
+        /></GraphActionIcon>
       </div>
 
       <NodeDetailPanel

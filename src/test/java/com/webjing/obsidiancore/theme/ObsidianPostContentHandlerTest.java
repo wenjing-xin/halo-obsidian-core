@@ -15,6 +15,25 @@ import run.halo.app.theme.ReactivePostContentHandler.PostContentContext;
 
 class ObsidianPostContentHandlerTest {
     @Test
+    void newTagRendersAfterWarmupWithoutGraphOrLegacySyntaxEnabled() {
+        var cache = mock(PostLinkIndexCache.class);
+        var loaded = new AtomicBoolean();
+        when(cache.warmup()).thenReturn(Mono.fromRunnable(() -> loaded.set(true)));
+        when(cache.lookupByName("p1")).thenAnswer(call -> loaded.get()
+            ? Optional.of(new PostLinkIndexCache.PostTarget("p1", "Renamed", "/current"))
+            : Optional.empty());
+        var settings = new ObsidianSettings();
+        settings.setRenderWikilinks(false);
+        settings.setAllowAnonymousGraph(false);
+        var handler = new ObsidianPostContentHandler(cache, settings);
+        var context = PostContentContext.builder().content(
+            "<p><obsidian-core-link post=\"p1\" url=\"/old\" title=\"Article\">Alias</obsidian-core-link></p>").build();
+        String result = handler.handle(context).block().getContent();
+        assertThat(result).contains("href=\"/current\"", ">Alias</a>")
+            .doesNotContain("/old", "<script", "<obsidian-core-link");
+    }
+
+    @Test
     void renderingWaitsForWarmup() {
         var cache = mock(PostLinkIndexCache.class);
         var loaded = new AtomicBoolean();

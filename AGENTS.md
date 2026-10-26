@@ -17,7 +17,7 @@
 
 ## Wikilink invariants
 
-- Maintain one `WikiLink` per source post, named `wikilink-<postName>`, from published release content. Index both Markdown/HTML `[[title]]`, aliases/headings, and structured editor anchors with their stable post names.
+- Maintain one `WikiLink` per source post, named `wikilink-<postName>`, from published release content. Index `obsidian-core-link` tags from Markdown or HTML by their stable `post` attribute. New editor output and copied tags must use this canonical format.
 - Skip code, comments, scripts/styles and ordinary anchors. Escape output and do not corrupt surrounding HTML.
 - Resolve targets using eligible published posts; backlink queries use the multi-value `spec.linkedTargets` index. Changes to titles, publication, visibility and deletion must invalidate caches and reconcile affected links.
 - Never put destructive `switchIfEmpty` fallback after a `Mono<Void>`/`then()` success path: completion without a value is not absence of a post. Keep fallback writes lazy and test both create and update paths.
@@ -36,6 +36,8 @@
 - Public graph APIs are read-only, require `allowAnonymousGraph`, and expose only published PUBLIC, non-deleted articles. Configuration failures must fail closed. Never broaden anonymous permissions for convenience.
 - Use Halo components, shared stores/utils and FormKit before custom equivalents; use the existing `axiosInstance` API wrapper.
 - Use `VPageHeader`, `VCard` header/footer slots, explicit loading/error/empty states and responsive layouts. The backlink management page has an outer `md:m-4` margin and distinct responsive statistic cards.
+- Markdown authors copy `<obsidian-core-link post="..." url="..." title="...">text</obsidian-core-link>` tags through the native article-row dropdown's `post:list-item:operation:create` extension. No migration of old anchor tags is needed before release. The `post` attribute drives backlink indexing; `url` is a safe navigation fallback only for URL-only tags. Escape all copied attributes/text and reject unsafe URL schemes.
+- Graph toolbar actions use uniform 20px icons on single 36px pale backgrounds with subtle hover changes, tooltips and keyboard support; no nested Halo button chrome. Relation lists use Halo `VEntity`/`VEntityField`, title-to-editor navigation, metadata/status and native dropdown slots.
 - Do not hand-edit generated API clients, built bundles or packaged resources. Change source and rebuild. Do not commit credentials, local fixture data or unrelated changes.
 
 ## Verification and delivery

@@ -7,6 +7,56 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class WikiLinkParserTest {
+    @Test
+    void formattedMultilineTagsKeepIndentedAttributesAndLiteralBackticks() {
+        String html = "<obsidian-core-link\n    post=\"p1\"\n    url=\"/a\"\n"
+            + "    title=\"The `code` guide\"\n>Alias</obsidian-core-link>";
+        var result = WikiLinkParser.parse(html);
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().postName()).isEqualTo("p1");
+        assertThat(result.getFirst().target()).isEqualTo("The `code` guide");
+    }
+
+    @Test
+    void shouldIndexCopiedHtmlTagByStablePostNameInMarkdown() {
+        String raw = "参考 <obsidian-core-link post=\"target-post\" url=\"/target\">"
+            + "A &amp; B &#91;Guide&#93;</obsidian-core-link>。";
+        var result = WikiLinkParser.parse(raw);
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().postName()).isEqualTo("target-post");
+        assertThat(result.getFirst().target()).isEqualTo("A & B [Guide]");
+    }
+
+    @Test
+    void shouldNotIndexCopiedTagExamplesInsideCodeOrComments() {
+        String anchor = "<obsidian-core-link post=\"target\">Target</obsidian-core-link>";
+        String raw = "```html\n" + anchor + "\n```\n"
+            + "   ~~~html\n" + anchor + "\n   ~~~\n"
+            + "`" + anchor + "`\n    " + anchor + "\n"
+            + "<pre><code>" + anchor + "</code></pre>"
+            + "<!-- " + anchor + " --><script>" + anchor + "</script>";
+        assertThat(WikiLinkParser.parse(raw)).isEmpty();
+    }
+
+    @Test
+    void customTagUsesTitleForUnresolvedTargetAndTextAsAlias() {
+        var result = WikiLinkParser.parse("<obsidian-core-link title='Target title' url='/old' post='p1'>Alias</obsidian-core-link>");
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().postName()).isEqualTo("p1");
+        assertThat(result.getFirst().target()).isEqualTo("Target title");
+        assertThat(result.getFirst().alias()).isEqualTo("Alias");
+    }
+
+    @Test
+    void urlOnlyAndOldAnchorTagsDoNotCreateArticleRelationships() {
+        assertThat(WikiLinkParser.parse("<obsidian-core-link url='/example' title='Example'></obsidian-core-link>"
+            + "<a data-obsidian-post='old'>Old</a>")).isEmpty();
+    }
+
+    @Test
+    void customTagInsideNormalAnchorDoesNotCreateNestedRelationships() {
+        assertThat(WikiLinkParser.parse("<a href='/example'><obsidian-core-link post='p1'>Example</obsidian-core-link></a>")).isEmpty();
+    }
 
     @Test
     void shouldParseBasicLinks() {
