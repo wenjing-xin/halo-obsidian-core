@@ -39,6 +39,8 @@ public class PostLinkIndexCache {
 
     private volatile Map<String, PostTarget> byLowerCaseTitle = Map.of();
 
+    private volatile Map<String, PostTarget> byPostName = Map.of();
+
     private volatile Instant loadedAt = null;
 
     private volatile Mono<Void> loading = null;
@@ -58,6 +60,14 @@ public class PostLinkIndexCache {
     }
 
     /**
+     * Resolve a post name (metadata.name) to a published post, used by
+     * structured links inserted via the editor "文章关联" action.
+     */
+    public Mono<Optional<PostTarget>> resolveByName(String postName) {
+        return ensureLoaded().thenReturn(lookupByName(postName));
+    }
+
+    /**
      * Synchronous lookup against the currently loaded cache; call {@link #warmup()}
      * first. Matching is case-insensitive unless {@code caseSensitive} is true.
      */
@@ -69,6 +79,17 @@ public class PostLinkIndexCache {
             return Optional.ofNullable(byTitle.get(title));
         }
         return Optional.ofNullable(byLowerCaseTitle.get(title.toLowerCase(Locale.ROOT)));
+    }
+
+    /**
+     * Synchronous post-name lookup against the currently loaded cache; call
+     * {@link #warmup()} first.
+     */
+    public Optional<PostTarget> lookupByName(String postName) {
+        if (postName == null || postName.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(byPostName.get(postName));
     }
 
     /**
@@ -133,20 +154,27 @@ public class PostLinkIndexCache {
                 var permalink = post.getStatus() == null ? null : post.getStatus().getPermalink();
                 return permalink != null && !permalink.isBlank();
             })
-            .collectMap(post -> post.getSpec().getTitle().strip(), post -> {
-                var permalink = post.getStatus() == null ? null : post.getStatus().getPermalink();
-                return new PostTarget(post.getMetadata().getName(),
-                    post.getSpec().getTitle(), permalink);
-            })
-            .doOnNext(map -> {
-                Map<String, PostTarget> lower = new HashMap<>(Math.max(16, map.size() * 2));
-                map.forEach((title, target) ->
-                    lower.put(title.toLowerCase(Locale.ROOT), target));
-                synchronized (lock) {
-                    this.byTitle = map;
-                    this.byLowerCaseTitle = lower;
+            .collectList()
+            .doOnNext(posts -> {
+                Map<String, PostTarget> byTitleMap = new HashMap<>(Math.max(16, posts.size() * 2));
+                Map<String, PostTarget> lower = new HashMap<>(Math.max(16, posts.size() * 2));
+                Map<String, PostTarget> byName = new HashMap<>(Math.max(16, posts.size() * 2));
+                for (Post post : posts) {
+                    var permalink = post.getStatus() == null
+                        ? null : post.getStatus().getPermalink();
+                    var target = new PostTarget(post.getMetadata().getName(),
+                        post.getSpec().getTitle(), permalink);
+                    String title = post.getSpec().getTitle().strip();
+                    byTitleMap.put(title, target);
+                    lower.put(title.toLowerCase(Locale.ROOT), target);
+                    byName.put(post.getMetadata().getName(), target);
                 }
-                log.debug("PostLinkIndexCache loaded {} posts", map.size());
+                synchronized (lock) {
+                    this.byTitle = byTitleMap;
+                    this.byLowerCaseTitle = lower;
+                    this.byPostName = byName;
+                }
+                log.debug("PostLinkIndexCache loaded {} posts", posts.size());
             })
             .onErrorMap(e -> {
                 log.error("Failed to build post link index", e);

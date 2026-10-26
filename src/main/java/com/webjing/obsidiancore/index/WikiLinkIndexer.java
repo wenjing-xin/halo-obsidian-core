@@ -143,7 +143,7 @@ public class WikiLinkIndexer {
                     return Mono.just(link);
                 }
                 return Flux.fromIterable(occurrences)
-                    .concatMap(occ -> linkCache.resolve(occ.target(), caseSensitive)
+                    .concatMap(occ -> resolveOccurrence(occ, caseSensitive)
                         .map(opt -> new ResolvedOccurrence(occ, opt)))
                     .collectList()
                     .map(resolved -> assemble(post, resolved));
@@ -218,6 +218,19 @@ public class WikiLinkIndexer {
         run.halo.app.extension.Metadata metadata = new run.halo.app.extension.Metadata();
         metadata.setName(WIKILINK_NAME_PREFIX + postName);
         return metadata;
+    }
+
+    /**
+     * Resolve an occurrence to a published target. Structured anchor links
+     * carry a post name and resolve by name (title-independent); plain
+     * {@code [[...]]} links resolve by title.
+     */
+    private Mono<Optional<PostLinkIndexCache.PostTarget>> resolveOccurrence(
+            Occurrence occ, boolean caseSensitive) {
+        if (occ.postName() != null && !occ.postName().isBlank()) {
+            return linkCache.resolveByName(occ.postName());
+        }
+        return linkCache.resolve(occ.target(), caseSensitive);
     }
 
     private record ResolvedOccurrence(Occurrence occurrence,

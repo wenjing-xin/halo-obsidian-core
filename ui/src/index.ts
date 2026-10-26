@@ -3,6 +3,7 @@ import { definePlugin } from '@halo-dev/ui-shared'
 import { IconDashboard } from '@halo-dev/components'
 import { markRaw } from 'vue'
 import { GraphNode } from './editor/graph-node'
+import { ObsidianLink } from './editor/obsidian-link'
 
 export default definePlugin({
   components: {},
@@ -27,6 +28,6 @@ export default definePlugin({
     },
   ],
   extensionPoints: {
-    'default:editor:extension:create': () => [GraphNode],
+    'default:editor:extension:create': () => [GraphNode, ObsidianLink],
   },
 })

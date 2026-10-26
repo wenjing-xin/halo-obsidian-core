@@ -45,7 +45,7 @@ export interface RendererOptions {
   onViewportChange?: (transform: { x: number; y: number; k: number }) => void
 }
 
-const DEFAULT_FORCES: RendererForces = { center: 0.08, repel: 2.5, link: 1, distance: 55 }
+const DEFAULT_FORCES: RendererForces = { center: 0.15, repel: 2.2, link: 1, distance: 55 }
 
 /** Patch type accepting partial forces for constructor/setData/setOptions. */
 export type RendererOptionsInput = Partial<Omit<RendererOptions, 'forces'>> & {
@@ -547,7 +547,52 @@ export class GraphRenderer {
     this.settleTimer = setTimeout(() => {
       this.layout?.stop()
       this.settleTimer = null
+      this.normalizePositions()
     }, ms)
+  }
+
+  /**
+   * Rescale the settled layout around its centroid so the graph always ends
+   * up centered and compact: link lengths become uniform regardless of the
+   * raw ForceAtlas2 coordinate scale, and the camera reverts to the default
+   * "fit all" view. Outliers beyond the 98th-percentile radius are clamped so
+   * a single far-away node cannot stretch the whole graph.
+   */
+  private normalizePositions(): void {
+    if (this.destroyed || this.graph.order === 0) {
+      return
+    }
+    let cx = 0
+    let cy = 0
+    this.graph.forEachNode((_key, attrs) => {
+      cx += attrs.x
+      cy += attrs.y
+    })
+    cx /= this.graph.order
+    cy /= this.graph.order
+    const dists: number[] = []
+    this.graph.forEachNode((_key, attrs) => {
+      dists.push(Math.hypot(attrs.x - cx, attrs.y - cy))
+    })
+    dists.sort((a, b) => a - b)
+    const radius = dists[Math.floor(dists.length * 0.98)] || dists[dists.length - 1] || 1
+    const scale = NODE_SCALE_TARGET / Math.max(radius, 1e-6)
+    const maxRadius = NODE_SCALE_TARGET * 1.3
+    this.graph.updateEachNodeAttributes((_key, attrs) => {
+      let dx = (attrs.x - cx) * scale
+      let dy = (attrs.y - cy) * scale
+      const len = Math.hypot(dx, dy)
+      if (len > maxRadius && len > 0) {
+        dx = (dx / len) * maxRadius
+        dy = (dy / len) * maxRadius
+      }
+      attrs.x = cx + dx
+      attrs.y = cy + dy
+      return attrs
+    })
+    this.updateAutoScale()
+    void this.sigma.getCamera().animate({ x: 0.5, y: 0.5, ratio: 1 }, { duration: 250 })
+    this.sigma.refresh()
   }
 
   // ---------------------------------------------------------------------------
@@ -675,7 +720,11 @@ export class GraphRenderer {
 
     const labelAlpha = this.opts.textFade * (1 - dim)
     out.labelColor = withAlpha(theme.label, labelAlpha)
-    out.labelVisibility = dim > 0.55 ? 'hidden' : 'auto'
+    // Plain text right under the node, no card/background styling; the
+    // focused node's title is always shown on hover.
+    out.labelPosition = 'below'
+    out.labelBackgroundColor = 'transparent'
+    out.labelVisibility = key === focus ? 'visible' : dim > 0.55 ? 'hidden' : 'auto'
 
     return out
   }

@@ -18,7 +18,7 @@
       <IconGitBranch />
     </template>
   </VPageHeader>
-  <VCard class="md:m-4" :body-class="['!p-1']">
+  <VCard class="!m-0 !rounded-none !border-0 !shadow-none" :body-class="['!p-0']">
     <template #header>
       <VTabbar v-model:active-id="activeTab" :items="tabs" type="outline" class="w-full" />
     </template>

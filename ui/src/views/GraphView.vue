@@ -56,8 +56,8 @@ const appearance = reactive({
 
 // Force sliders (Obsidian "力度" section), stored in slider units.
 const forceSliders = reactive({
-  center: 16,
-  repel: 26,
+  center: 30,
+  repel: 22,
   link: 50,
   distance: 55,
 })
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-16rem)] flex-col">
+  <div class="flex h-[calc(100vh-9rem)] flex-col">
     <VAlert
       v-if="error"
       class="mx-3 mt-3 shrink-0"
