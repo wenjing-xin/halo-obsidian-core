@@ -40,12 +40,17 @@ public class ObsidianPostContentHandler implements ReactivePostContentHandler {
         if (content == null) {
             return Mono.just(context);
         }
+        if (context.getPost() != null && context.getPost().getMetadata() != null) {
+            content = GraphEmbedContext.bindCurrentPost(content,
+                context.getPost().getMetadata().getName());
+            context.setContent(content);
+        }
         boolean hasWikilinks = settings.isRenderWikilinks() && content.contains("[[");
         boolean hasAnchors = content.contains("data-obsidian-post");
         if (!hasWikilinks && !hasAnchors) {
             return Mono.just(context);
         }
-        return linkCache.warmup().thenReturn(apply(context, hasWikilinks));
+        return linkCache.warmup().then(Mono.fromSupplier(() -> apply(context, hasWikilinks)));
     }
 
     private PostContentContext apply(PostContentContext context, boolean hasWikilinks) {

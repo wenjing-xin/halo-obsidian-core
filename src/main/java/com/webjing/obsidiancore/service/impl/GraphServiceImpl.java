@@ -21,7 +21,9 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.content.Category;
 import run.halo.app.core.extension.content.Post;
@@ -72,9 +74,17 @@ public class GraphServiceImpl implements GraphService {
         GraphQuery base = new GraphQuery(null, Set.of(), Set.of(), query.showBroken(), false,
             query.showTaxonomy(), false);
         return switch (mode) {
-            case "local" -> buildGraph(base, true, query.post(), null, depth);
-            case "nodes" -> buildGraph(base, true, null, query.nodes(), 0);
-            default -> buildGraph(base, true, null, null, 0);
+            case "local" -> query.post() == null || query.post().isBlank()
+                ? Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Local graph requires a center post"))
+                : buildGraph(base, true, query.post(), null, depth);
+            case "nodes" -> query.nodes() == null || query.nodes().isEmpty()
+                ? Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Selected graph requires at least one post"))
+                : buildGraph(base, true, null, query.nodes(), 0);
+            case "full" -> buildGraph(base, true, null, null, 0);
+            default -> Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Unknown graph mode"));
         };
     }
 
@@ -136,7 +146,8 @@ public class GraphServiceImpl implements GraphService {
         // 1. Candidate posts after visibility and filters.
         Map<String, Post> postById = new LinkedHashMap<>();
         for (Post post : posts) {
-            if (publicOnly && !Post.isPublic(post.getSpec())) {
+            if (publicOnly && (!Post.isPublic(post.getSpec())
+                || !Boolean.TRUE.equals(post.getSpec().getPublish()))) {
                 continue;
             }
             var spec = post.getSpec();
@@ -159,10 +170,14 @@ public class GraphServiceImpl implements GraphService {
         Map<String, List<String>> adjacency = new HashMap<>();
         for (WikiLink link : wikiLinks) {
             var spec = link.getSpec();
-            if (spec == null || spec.getSourcePostName() == null) {
+            if (spec == null || !postById.containsKey(spec.getSourcePostName())
+                || spec.getLinkedTargets() == null) {
                 continue;
             }
             for (String target : spec.getLinkedTargets()) {
+                if (!postById.containsKey(target)) {
+                    continue;
+                }
                 adjacency.computeIfAbsent(spec.getSourcePostName(), k -> new ArrayList<>())
                     .add(target);
                 adjacency.computeIfAbsent(target, k -> new ArrayList<>())
@@ -170,28 +185,12 @@ public class GraphServiceImpl implements GraphService {
             }
         }
         if (localRoot != null) {
-            if (!postById.containsKey(localRoot)) {
-                Post root = posts.stream()
-                    .filter(post -> localRoot.equals(post.getMetadata().getName()))
-                    .filter(post -> Post.isPublic(post.getSpec()) || !publicOnly)
-                    .findFirst().orElse(null);
-                if (root != null) {
-                    postById.put(localRoot, root);
-                }
-            }
             Set<String> scope = bfsScope(adjacency, localRoot, depth);
             scope.add(localRoot);
             postById.keySet().retainAll(scope);
         }
         if (focusNodes != null && !focusNodes.isEmpty()) {
-            Set<String> scope = new HashSet<>();
-            for (String node : focusNodes) {
-                if (postById.containsKey(node)) {
-                    scope.add(node);
-                    scope.addAll(adjacency.getOrDefault(node, List.of()));
-                }
-            }
-            postById.keySet().retainAll(scope);
+            postById.keySet().retainAll(focusNodes);
         }
 
         // 3. Wiki edges among visible posts.
@@ -199,7 +198,8 @@ public class GraphServiceImpl implements GraphService {
         List<GraphEdge> edges = new ArrayList<>();
         for (WikiLink link : wikiLinks) {
             var spec = link.getSpec();
-            if (spec == null || !visiblePostIds.contains(spec.getSourcePostName())) {
+            if (spec == null || spec.getLinkedTargets() == null
+                || !visiblePostIds.contains(spec.getSourcePostName())) {
                 continue;
             }
             for (String target : spec.getLinkedTargets()) {
@@ -217,7 +217,8 @@ public class GraphServiceImpl implements GraphService {
             Set<String> brokenAdded = new HashSet<>();
             for (WikiLink link : wikiLinks) {
                 var spec = link.getSpec();
-                if (spec == null || !visiblePostIds.contains(spec.getSourcePostName())) {
+                if (spec == null || spec.getUnresolvedTitles() == null
+                    || !visiblePostIds.contains(spec.getSourcePostName())) {
                     continue;
                 }
                 for (String title : spec.getUnresolvedTitles()) {
@@ -259,6 +260,14 @@ public class GraphServiceImpl implements GraphService {
         }
 
         // 7. Taxonomy hubs and edges.
+        for (int i = 0; i < nodes.size(); i++) {
+            var node = nodes.get(i);
+            var cats = postById.get(node.id()).getSpec().getCategories();
+            String color = cats == null || cats.isEmpty() ? null
+                : categoryColor.get(cats.get(cats.size() - 1));
+            nodes.set(i, new GraphNode(node.id(), node.type(), node.title(), node.permalink(),
+                node.categories(), node.tags(), node.degree(), node.size(), color, node.broken()));
+        }
         if (query.showTaxonomy()) {
             addTaxonomy(postById, categoryById, tagById, excludeCategories, excludeTags,
                 query.expandParents(), categoryColor, edges, nodes);
@@ -268,12 +277,31 @@ public class GraphServiceImpl implements GraphService {
         decorate(nodes, edges, brokenEdges, categoryColor, tagById);
 
         boolean truncated = false;
-        int maxNodes = settings.getGraphMaxNodes() == null ? 500 : settings.getGraphMaxNodes();
+        int maxNodes = Math.max(1, settings.getGraphMaxNodes() == null
+            ? 500 : settings.getGraphMaxNodes());
         int totalPosts = (int) nodes.stream().filter(n -> n.type() == NodeType.post).count();
         if (nodes.size() > maxNodes) {
+            if (localRoot != null) {
+                nodes.sort(java.util.Comparator.comparing(node -> !node.id().equals(localRoot)));
+            }
             nodes = new ArrayList<>(nodes.subList(0, maxNodes));
             truncated = true;
         }
+        Set<String> retained = nodes.stream().map(GraphNode::id)
+            .collect(java.util.stream.Collectors.toSet());
+        edges.removeIf(edge -> !retained.contains(edge.source()) || !retained.contains(edge.target()));
+        brokenEdges.removeIf(edge -> !retained.contains(edge.source()));
+        Set<String> brokenTargets = brokenEdges.stream().map(GraphEdge::target)
+            .collect(java.util.stream.Collectors.toSet());
+        brokenNodes.removeIf(node -> !brokenTargets.contains(node.id()));
+        int remaining = Math.max(0, maxNodes - nodes.size());
+        if (brokenNodes.size() > remaining) {
+            brokenNodes = new ArrayList<>(brokenNodes.subList(0, remaining));
+            truncated = true;
+        }
+        Set<String> keptBroken = brokenNodes.stream().map(GraphNode::id)
+            .collect(java.util.stream.Collectors.toSet());
+        brokenEdges.removeIf(edge -> !keptBroken.contains(edge.target()));
 
         return new GraphPayload(nodes, edges, brokenNodes, brokenEdges, List.of(PALETTE),
             totalPosts, truncated);

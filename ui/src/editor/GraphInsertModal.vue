@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { VButton, VModal, VSwitch } from '@halo-dev/components'
+import { VAlert, VButton, VModal, VLoading } from '@halo-dev/components'
 import { FormKit } from '@formkit/vue'
-import { ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { searchPostBriefs, type PostBrief } from '../api/obsidian'
+import { normalizeTheme, type ThemeMode } from '../shared/graph-renderer/theme-controller'
 
 export interface GraphAttrs {
   mode: 'full' | 'local' | 'nodes'
   post: string
   nodes: string
   depth: number
-  dark: boolean
+  theme: ThemeMode
+  dark?: boolean | null
 }
 
 const props = defineProps<{
@@ -26,7 +28,23 @@ const mode = ref<'full' | 'local' | 'nodes'>('full')
 const post = ref('')
 const nodes = ref('')
 const depth = ref(1)
-const dark = ref(true)
+const theme = ref<ThemeMode>('auto')
+const center = ref<'current' | 'selected'>('current')
+const searchError = ref('')
+const selectedNodes = computed(() =>
+  nodes.value
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean),
+)
+const valid = computed(
+  () =>
+    mode.value === 'full' ||
+    (mode.value === 'local'
+      ? center.value === 'current' || !!post.value
+      : selectedNodes.value.length > 0),
+)
+let searchSequence = 0
 
 const keyword = ref('')
 const results = ref<PostBrief[]>([])
@@ -38,19 +56,27 @@ watch(
   () => props.visible,
   (visible) => {
     if (!visible) {
+      searchSequence++
+      if (searchTimer) clearTimeout(searchTimer)
+      searching.value = false
       return
     }
     mode.value = props.initial?.mode ?? 'full'
     post.value = props.initial?.post ?? ''
     nodes.value = props.initial?.nodes ?? ''
     depth.value = props.initial?.depth ?? 1
-    dark.value = props.initial?.dark ?? true
+    theme.value = normalizeTheme(props.initial?.theme, props.initial?.dark)
+    center.value = post.value ? 'selected' : 'current'
+    searchError.value = ''
+    searchSequence++
     keyword.value = ''
     results.value = []
-  }
+  },
+  { immediate: true },
 )
 
 watch(keyword, () => {
+  searchSequence++
   if (searchTimer) {
     clearTimeout(searchTimer)
   }
@@ -60,31 +86,47 @@ watch(keyword, () => {
 async function search() {
   if (!keyword.value.trim()) {
     results.value = []
+    searching.value = false
     return
   }
+  const sequence = ++searchSequence
   searching.value = true
+  searchError.value = ''
   try {
-    results.value = await searchPostBriefs(keyword.value.trim())
+    const found = await searchPostBriefs(keyword.value.trim())
+    if (sequence === searchSequence) results.value = found
+  } catch {
+    if (sequence === searchSequence) searchError.value = '文章检索失败，请重试'
   } finally {
-    searching.value = false
+    if (sequence === searchSequence) searching.value = false
   }
 }
 
 function selectPost(candidate: PostBrief) {
-  post.value = candidate.name
-  keyword.value = candidate.title
+  if (mode.value === 'nodes') {
+    nodes.value = [...new Set([...selectedNodes.value, candidate.name])].join(',')
+  } else {
+    post.value = candidate.name
+  }
   results.value = []
+  keyword.value = ''
 }
 
 function confirm() {
+  if (!valid.value) return
   emit('confirm', {
     mode: mode.value,
-    post: post.value.trim(),
-    nodes: nodes.value.trim(),
+    post: mode.value === 'local' && center.value === 'selected' ? post.value.trim() : '',
+    nodes: mode.value === 'nodes' ? [...new Set(selectedNodes.value)].join(',') : '',
     depth: Math.min(Math.max(Number(depth.value) || 1, 1), 5),
-    dark: dark.value,
+    theme: theme.value,
+    dark: null,
   })
 }
+onBeforeUnmount(() => {
+  searchSequence++
+  if (searchTimer) clearTimeout(searchTimer)
+})
 </script>
 
 <template>
@@ -98,40 +140,65 @@ function confirm() {
           :outer-class="['!mb-0']"
           :options="[
             { label: '全站图谱', value: 'full' },
-            { label: '局部图谱（以一篇文章为中心）', value: 'local' },
-            { label: '指定文章', value: 'nodes' },
+            { label: '围绕文章的局部图谱', value: 'local' },
+            { label: '指定文章集合的局部图谱', value: 'nodes' },
           ]"
         />
       </div>
 
       <div v-if="mode === 'local'" class="graph-modal__field">
-        <label class="graph-modal__label">中心文章</label>
+        <FormKit
+          v-model="center"
+          type="select"
+          label="中心文章"
+          :options="[
+            { label: '当前文章（发布时自动绑定）', value: 'current' },
+            { label: '指定另一篇文章', value: 'selected' },
+          ]"
+        />
+        <p v-if="center === 'current'" class="graph-modal__meta">
+          围绕嵌入此图谱的文章展示入链与出链，不会退回全站图谱。
+        </p>
+      </div>
+      <div
+        v-if="mode === 'nodes' || (mode === 'local' && center === 'selected')"
+        class="graph-modal__field"
+      >
         <FormKit
           v-model="keyword"
           type="text"
+          label="搜索文章"
+          placeholder="输入标题，点击文章选择…"
           :outer-class="['!mb-0']"
-          placeholder="搜索并选择一篇文章…"
         />
-        <p v-if="post" class="graph-modal__meta">已选择：{{ post }}</p>
+        <VLoading v-if="searching" />
+        <p v-if="searchError" role="alert">{{ searchError }}</p>
         <ul v-if="results.length" class="graph-modal__results">
-          <li v-for="candidate in results" :key="candidate.name" @click="selectPost(candidate)">
-            {{ candidate.title }}
+          <li v-for="candidate in results" :key="candidate.name">
+            <button
+              type="button"
+              class="w-full border-0 bg-transparent text-left cursor-pointer"
+              @click="selectPost(candidate)"
+            >
+              {{ candidate.title }}
+            </button>
           </li>
         </ul>
+        <p v-if="mode === 'local' && post" class="graph-modal__meta">已选择：{{ post }}</p>
+        <template v-if="mode === 'nodes'">
+          <p class="graph-modal__meta">
+            已选 {{ selectedNodes.length }} 篇；仅展示所选文章之间的关系。
+          </p>
+          <FormKit
+            v-model="nodes"
+            type="textarea"
+            label="所选文章标识（可编辑，逗号分隔）"
+            :rows="2"
+          />
+        </template>
       </div>
 
-      <div v-if="mode === 'nodes'" class="graph-modal__field">
-        <label class="graph-modal__label">文章（Post Name，英文逗号分隔）</label>
-        <FormKit
-          v-model="nodes"
-          type="textarea"
-          :rows="3"
-          :outer-class="['!mb-0']"
-          placeholder="post-a,post-b,post-c"
-        />
-      </div>
-
-      <div v-if="mode !== 'full'" class="graph-modal__field">
+      <div v-if="mode === 'local'" class="graph-modal__field">
         <label class="graph-modal__label">展开深度（{{ depth }}）</label>
         <FormKit
           v-model="depth"
@@ -143,16 +210,26 @@ function confirm() {
         />
       </div>
 
-      <div class="graph-modal__field graph-modal__field--inline">
-        <label class="graph-modal__label graph-modal__label--inline">
-          <VSwitch v-model="dark" />
-          使用深色主题（Obsidian 风格）
-        </label>
-      </div>
+      <FormKit
+        v-model="theme"
+        type="select"
+        label="图谱主题"
+        :options="[
+          { label: '跟随文章主题（自动）', value: 'auto' },
+          { label: '明亮', value: 'light' },
+          { label: '暗黑', value: 'dark' },
+        ]"
+      />
+      <VAlert
+        v-if="!valid"
+        type="info"
+        :closable="false"
+        title="请选择中心文章或至少一篇局部图谱文章"
+      />
     </div>
     <template #footer>
       <VButton @click="emit('close')">取消</VButton>
-      <VButton type="secondary" @click="confirm">确定</VButton>
+      <VButton type="secondary" :disabled="!valid" @click="confirm">确定</VButton>
     </template>
   </VModal>
 </template>

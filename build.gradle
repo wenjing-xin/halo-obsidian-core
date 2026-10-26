@@ -57,3 +57,8 @@ tasks.register('processUiResources', Copy) {
 tasks.named('classes') {
     dependsOn tasks.named('processUiResources')
 }
+
+// The widget is generated into static resources; build it before copying resources.
+tasks.named('processResources') {
+    dependsOn project(':ui').tasks.named('pnpmBuild')
+}

@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { VAlert, VButton, VEmpty, VLoading, VModal, VSwitch } from '@halo-dev/components'
+import {
+  IconRefreshLine,
+  VAlert,
+  VButton,
+  VEmpty,
+  VLoading,
+  VModal,
+  VSwitch,
+} from '@halo-dev/components'
+import IconPlayLine from '~icons/ri/play-line'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   fetchCategoryOptions,
@@ -24,7 +33,7 @@ const error = ref('')
 const selected = ref<GraphNode | null>(null)
 const backlinksTarget = ref<{ name: string; title: string } | null>(null)
 const enlarged = ref(false)
-const panelOpen = ref(true)
+const panelOpen = ref(false)
 const sections = reactive({ filters: true, display: true, forces: true })
 
 const categoryOptions = ref<TaxonomyOption[]>([])
@@ -45,6 +54,7 @@ const visual = reactive({
   showArrows: false,
   showCategories: true,
   showTags: true,
+  showGroups: false,
 })
 
 // Appearance sliders (Obsidian "外观" section), stored in slider units.
@@ -73,17 +83,17 @@ const forceOptions = computed(() => ({
 }))
 
 const categorySelectOptions = computed(() =>
-  categoryOptions.value.map((option) => ({ label: option.displayName, value: option.name }))
+  categoryOptions.value.map((option) => ({ label: option.displayName, value: option.name })),
 )
 const tagSelectOptions = computed(() =>
-  tagOptions.value.map((option) => ({ label: option.displayName, value: option.name }))
+  tagOptions.value.map((option) => ({ label: option.displayName, value: option.name })),
 )
 
 const hasFilters = computed(
   () =>
     filters.selectedCategories.length > 0 ||
     filters.selectedTags.length > 0 ||
-    filters.keyword.trim() !== ''
+    filters.keyword.trim() !== '',
 )
 
 const summary = ref<Awaited<ReturnType<typeof fetchSummary>>['data'] | null>(null)
@@ -93,11 +103,13 @@ const summary = ref<Awaited<ReturnType<typeof fetchSummary>>['data'] | null>(nul
 // ---------------------------------------------------------------------------
 
 const iconBtnClass = computed(() => [
-  'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border p-0 backdrop-blur-md transition-colors disabled:cursor-default disabled:opacity-50',
+  'inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border p-0 backdrop-blur-md transition-colors disabled:cursor-default disabled:opacity-50',
   visual.dark
     ? 'border-white/10 bg-neutral-800/85 text-gray-400 hover:bg-neutral-700/95 hover:text-gray-200'
     : 'border-slate-900/[0.08] bg-white/85 text-gray-500 hover:bg-white hover:text-gray-900',
 ])
+
+const haloIconBtnClass = computed(() => [...iconBtnClass.value, '!h-9 !w-9 !min-w-0 !p-0'])
 
 const zoomBtnClass = computed(() => [...iconBtnClass.value, 'text-sm'])
 
@@ -129,10 +141,7 @@ const emptyClass = computed(() => [
 ])
 
 function chevronClass(open: boolean) {
-  return [
-    'h-3 w-3 text-gray-400 transition-transform duration-200',
-    open ? 'rotate-90' : '',
-  ]
+  return ['h-3 w-3 text-gray-400 transition-transform duration-200', open ? 'rotate-90' : '']
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +180,7 @@ watch(
       load()
     }, 300)
   },
-  { deep: true }
+  { deep: true },
 )
 
 async function loadFilterOptions() {
@@ -202,6 +211,8 @@ const reindexing = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 async function reindex() {
+  if (reindexing.value) return
+  if (pollTimer) clearInterval(pollTimer)
   reindexing.value = true
   try {
     await reindexAll()
@@ -266,13 +277,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-[calc(100vh-9rem)] flex-col">
-    <VAlert
-      v-if="error"
-      class="mx-3 mt-3 shrink-0"
-      type="error"
-      :title="error"
-      :closable="false"
-    />
+    <VAlert v-if="error" class="mx-3 mt-3 shrink-0" type="error" :title="error" :closable="false" />
 
     <div class="relative min-h-[360px] flex-1 overflow-hidden">
       <VLoading v-if="loading && !payload" class="absolute inset-0 z-[2] bg-gray-500/[0.12]" />
@@ -290,6 +295,7 @@ onBeforeUnmount(() => {
         :show-arrows="visual.showArrows"
         :show-categories="visual.showCategories"
         :show-tags="visual.showTags"
+        :show-groups="visual.showGroups"
         :highlight="filters.keyword"
         :text-fade="textFade"
         :node-size="nodeSize"
@@ -306,42 +312,128 @@ onBeforeUnmount(() => {
 
       <!-- Obsidian-style collapsed floating controls -->
       <div v-if="!panelOpen" class="absolute right-3 top-3 z-[5] flex flex-col items-end gap-2">
-        <button type="button" :class="iconBtnClass" title="图谱设置" @click="panelOpen = true">
-          <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <VButton
+          v-tooltip="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'"
+          :class="haloIconBtnClass"
+          size="sm"
+          :disabled="reindexing"
+          :aria-busy="reindexing"
+          aria-label="重新索引并刷新图谱"
+          @click="reindex"
+        >
+          <template #icon
+            ><IconRefreshLine :class="['!h-5 !w-5 !text-xl', { 'animate-spin': reindexing }]"
+          /></template>
+        </VButton>
+        <button
+          type="button"
+          :class="iconBtnClass"
+          v-tooltip="'图谱设置'"
+          aria-label="图谱设置"
+          :aria-expanded="panelOpen"
+          @click="panelOpen = true"
+        >
+          <svg
+            class="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+            />
           </svg>
         </button>
-        <button type="button" :class="iconBtnClass" title="放大图谱" @click="enlarged = true">
-          <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+        <button
+          type="button"
+          :class="iconBtnClass"
+          v-tooltip="'放大图谱'"
+          aria-label="放大图谱"
+          @click="enlarged = true"
+        >
+          <svg
+            class="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+            />
           </svg>
         </button>
-        <VButton type="primary" size="sm" @click="replay">播放关系图谱生长动画</VButton>
+        <VButton
+          v-tooltip="'播放关系图谱生成动画'"
+          :class="haloIconBtnClass"
+          size="sm"
+          aria-label="播放关系图谱生成动画"
+          @click="replay"
+        >
+          <template #icon><IconPlayLine class="!h-5 !w-5 !text-xl" /></template>
+        </VButton>
       </div>
 
       <!-- Obsidian-style settings panel -->
       <aside v-else :class="panelClass">
         <div class="flex items-center justify-end px-2.5 pb-1 pt-2">
           <div class="inline-flex gap-1.5">
+            <VButton
+              v-tooltip="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'"
+              :class="haloIconBtnClass"
+              size="sm"
+              :disabled="reindexing"
+              :aria-busy="reindexing"
+              aria-label="重新索引并刷新图谱"
+              @click="reindex"
+            >
+              <template #icon
+                ><IconRefreshLine :class="['!h-5 !w-5 !text-xl', { 'animate-spin': reindexing }]"
+              /></template>
+            </VButton>
             <button
               type="button"
               :class="iconBtnClass"
-              title="重新索引"
-              :disabled="reindexing"
-              @click="reindex"
+              v-tooltip="'放大图谱'"
+              aria-label="放大图谱"
+              @click="enlarged = true"
             >
-              <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+              <svg
+                class="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+                />
               </svg>
             </button>
-            <button type="button" :class="iconBtnClass" title="放大图谱" @click="enlarged = true">
-              <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-              </svg>
-            </button>
-            <button type="button" :class="iconBtnClass" title="收起面板" @click="panelOpen = false">
-              <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <button
+              type="button"
+              :class="iconBtnClass"
+              v-tooltip="'收起面板'"
+              aria-label="收起面板"
+              @click="panelOpen = false"
+            >
+              <svg
+                class="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
             </button>
@@ -350,8 +442,20 @@ onBeforeUnmount(() => {
 
         <div class="flex-1 overflow-y-auto pb-2.5">
           <section :class="sectionClass">
-            <button type="button" :class="sectionHeaderClass" @click="sections.filters = !sections.filters">
-              <svg :class="chevronClass(sections.filters)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button
+              type="button"
+              :class="sectionHeaderClass"
+              @click="sections.filters = !sections.filters"
+            >
+              <svg
+                :class="chevronClass(sections.filters)"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="m9 6 6 6-6 6" />
               </svg>
               <span>筛选</span>
@@ -389,7 +493,10 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex items-center justify-between gap-2">
                 <span>仅显示已创建的笔记</span>
-                <VSwitch :model-value="!filters.showBroken" @update:model-value="(value: boolean) => (filters.showBroken = !value)" />
+                <VSwitch
+                  :model-value="!filters.showBroken"
+                  @update:model-value="(value: boolean) => (filters.showBroken = !value)"
+                />
               </div>
               <div class="flex items-center justify-between gap-2">
                 <span>分类层级</span>
@@ -411,8 +518,20 @@ onBeforeUnmount(() => {
           </section>
 
           <section :class="sectionClass">
-            <button type="button" :class="sectionHeaderClass" @click="sections.display = !sections.display">
-              <svg :class="chevronClass(sections.display)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button
+              type="button"
+              :class="sectionHeaderClass"
+              @click="sections.display = !sections.display"
+            >
+              <svg
+                :class="chevronClass(sections.display)"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="m9 6 6 6-6 6" />
               </svg>
               <span>外观</span>
@@ -430,25 +549,97 @@ onBeforeUnmount(() => {
                 <span>显示标签</span>
                 <VSwitch v-model="visual.showLabels" />
               </div>
-              <FormKit v-model="appearance.textFade" type="range" min="0" max="100" step="1" label="文本透明度" />
-              <FormKit v-model="appearance.nodeSize" type="range" min="40" max="200" step="1" label="节点大小" />
-              <FormKit v-model="appearance.lineThickness" type="range" min="30" max="250" step="1" label="连线粗细" />
-              <VButton type="primary" block @click="replay">播放动画</VButton>
+              <div class="flex items-center justify-between gap-2">
+                <span>分组颜色</span><VSwitch v-model="visual.showGroups" />
+              </div>
+              <FormKit
+                v-model="appearance.textFade"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                label="文本透明度"
+              />
+              <FormKit
+                v-model="appearance.nodeSize"
+                type="range"
+                min="40"
+                max="200"
+                step="1"
+                label="节点大小"
+              />
+              <FormKit
+                v-model="appearance.lineThickness"
+                type="range"
+                min="30"
+                max="250"
+                step="1"
+                label="连线粗细"
+              />
+              <VButton
+                v-tooltip="'播放关系图谱生成动画'"
+                :class="haloIconBtnClass"
+                size="sm"
+                aria-label="播放关系图谱生成动画"
+                @click="replay"
+              >
+                <template #icon><IconPlayLine class="!h-5 !w-5 !text-xl" /></template>
+              </VButton>
             </div>
           </section>
 
           <section :class="sectionClass">
-            <button type="button" :class="sectionHeaderClass" @click="sections.forces = !sections.forces">
-              <svg :class="chevronClass(sections.forces)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button
+              type="button"
+              :class="sectionHeaderClass"
+              @click="sections.forces = !sections.forces"
+            >
+              <svg
+                :class="chevronClass(sections.forces)"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="m9 6 6 6-6 6" />
               </svg>
               <span>力度</span>
             </button>
             <div v-show="sections.forces" :class="sectionBodyClass">
-              <FormKit v-model="forceSliders.center" type="range" min="0" max="100" step="1" label="图谱向心力" />
-              <FormKit v-model="forceSliders.repel" type="range" min="0" max="100" step="1" label="节点间的排斥力" />
-              <FormKit v-model="forceSliders.link" type="range" min="0" max="100" step="1" label="相连节点间的吸引力" />
-              <FormKit v-model="forceSliders.distance" type="range" min="20" max="120" step="1" label="连线长度" />
+              <FormKit
+                v-model="forceSliders.center"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                label="图谱向心力"
+              />
+              <FormKit
+                v-model="forceSliders.repel"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                label="节点间的排斥力"
+              />
+              <FormKit
+                v-model="forceSliders.link"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                label="相连节点间的吸引力"
+              />
+              <FormKit
+                v-model="forceSliders.distance"
+                type="range"
+                min="20"
+                max="120"
+                step="1"
+                label="连线长度"
+              />
             </div>
           </section>
         </div>
@@ -458,9 +649,33 @@ onBeforeUnmount(() => {
         class="absolute bottom-3 z-[4] flex flex-col gap-1.5"
         :class="panelOpen ? 'right-[288px]' : 'right-3'"
       >
-        <button type="button" :class="zoomBtnClass" title="放大" @click="zoom(1.25)">+</button>
-        <button type="button" :class="zoomBtnClass" title="缩小" @click="zoom(0.8)">−</button>
-        <button type="button" :class="zoomBtnClass" title="重置视图" @click="resetView">⟲</button>
+        <button
+          type="button"
+          :class="zoomBtnClass"
+          v-tooltip="'放大'"
+          aria-label="放大"
+          @click="zoom(1.25)"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          :class="zoomBtnClass"
+          v-tooltip="'缩小'"
+          aria-label="缩小"
+          @click="zoom(0.8)"
+        >
+          −
+        </button>
+        <VButton
+          v-tooltip="'重置视图'"
+          :class="haloIconBtnClass"
+          size="sm"
+          aria-label="重置视图"
+          @click="resetView"
+        >
+          <template #icon><IconRefreshLine class="!h-5 !w-5 !text-xl" /></template>
+        </VButton>
       </div>
 
       <NodeDetailPanel
@@ -471,12 +686,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <VModal
-      :visible="enlarged"
-      :width="1200"
-      title="关系图谱"
-      @close="enlarged = false"
-    >
+    <VModal :visible="enlarged" :width="1200" title="关系图谱" @close="enlarged = false">
       <div class="relative h-[75vh] overflow-hidden rounded-lg">
         <ObsidianGraphCanvas
           ref="modalCanvasRef"
@@ -486,6 +696,7 @@ onBeforeUnmount(() => {
           :show-arrows="visual.showArrows"
           :show-categories="visual.showCategories"
           :show-tags="visual.showTags"
+          :show-groups="visual.showGroups"
           :highlight="filters.keyword"
           :text-fade="textFade"
           :node-size="nodeSize"

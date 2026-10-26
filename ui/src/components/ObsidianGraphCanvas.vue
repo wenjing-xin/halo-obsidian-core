@@ -11,6 +11,7 @@ const props = withDefaults(
     showArrows?: boolean
     showCategories?: boolean
     showTags?: boolean
+    showGroups?: boolean
     highlight?: string
     textFade?: number
     nodeSize?: number
@@ -24,12 +25,13 @@ const props = withDefaults(
     showArrows: false,
     showCategories: true,
     showTags: true,
+    showGroups: false,
     highlight: '',
     textFade: 1,
     nodeSize: 1,
     lineThickness: 1,
     forces: () => ({}),
-  }
+  },
 )
 
 const emit = defineEmits<{
@@ -47,6 +49,7 @@ function currentOpts() {
     showArrows: props.showArrows,
     showCategories: props.showCategories,
     showTags: props.showTags,
+    showGroups: props.showGroups,
     textFade: props.textFade,
     nodeSize: props.nodeSize,
     lineThickness: props.lineThickness,
@@ -83,14 +86,22 @@ watch(
     if (renderer && payload) {
       renderer.setData(payload, currentOpts())
     }
-  }
+  },
 )
 
 watch(
-  () => [props.dark, props.showLabels, props.showArrows, props.textFade, props.nodeSize, props.lineThickness],
+  () => [
+    props.dark,
+    props.showGroups,
+    props.showLabels,
+    props.showArrows,
+    props.textFade,
+    props.nodeSize,
+    props.lineThickness,
+  ],
   () => {
     renderer?.setOptions(currentOpts())
-  }
+  },
 )
 
 watch(
@@ -98,7 +109,7 @@ watch(
   (forces) => {
     renderer?.setOptions({ forces: { ...forces } })
   },
-  { deep: true }
+  { deep: true },
 )
 
 watch(
@@ -107,14 +118,14 @@ watch(
     if (renderer && props.payload) {
       renderer.setData(props.payload, currentOpts())
     }
-  }
+  },
 )
 
 watch(
   () => props.highlight,
   (keyword) => {
     renderer?.setHighlight(keyword ?? '')
-  }
+  },
 )
 
 onBeforeUnmount(() => {

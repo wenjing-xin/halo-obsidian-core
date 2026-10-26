@@ -49,8 +49,12 @@ public class WikiLinkIndexer {
 
     public Mono<Void> indexPost(String postName) {
         return client.fetch(Post.class, postName)
+            // Detect a missing post before the successful indexing path becomes Mono<Void>.
+            .switchIfEmpty(Mono.defer(() -> deletePost(postName).then(Mono.empty())))
             .flatMap(post -> {
-                if (post.isDeleted() || isBlank(post.getSpec().getReleaseSnapshot())) {
+                if (post.isDeleted() || post.getSpec() == null
+                    || !Boolean.TRUE.equals(post.getSpec().getPublish())
+                    || isBlank(post.getSpec().getReleaseSnapshot())) {
                     return deletePost(postName);
                 }
                 return buildWikiLink(post)
@@ -58,7 +62,6 @@ public class WikiLinkIndexer {
                     .doOnSuccess(link -> log.debug("Indexed wikilink of post {}", postName))
                     .then();
             })
-            .switchIfEmpty(deletePost(postName))
             .onErrorResume(e -> {
                 log.error("Failed to index wikilink of post {}", postName, e);
                 return Mono.empty();
@@ -132,7 +135,7 @@ public class WikiLinkIndexer {
         String postName = post.getMetadata().getName();
         boolean caseSensitive = settings.isCaseSensitive();
         return postContentService.getReleaseContent(postName)
-            .map(ContentWrapper::getRaw)
+            .map(content -> content.getRaw() == null ? "" : content.getRaw())
             .defaultIfEmpty("")
             .flatMap(raw -> {
                 List<Occurrence> occurrences = WikiLinkParser.parse(raw);
@@ -207,7 +210,7 @@ public class WikiLinkIndexer {
                 incoming.getMetadata().setVersion(existing.getMetadata().getVersion());
                 return client.update(incoming);
             })
-            .switchIfEmpty(client.create(incoming));
+            .switchIfEmpty(Mono.defer(() -> client.create(incoming)));
     }
 
     private static boolean isBlank(String value) {

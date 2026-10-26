@@ -1,7 +1,7 @@
 /**
  * Obsidian-style visual specification for the relationship graph renderer.
  * The light theme mirrors the graph embedded on obsidian.md: a white canvas,
- * small dark dots, translucent purple edges and muted micro labels; the dark
+ * small dark dots, subtle neutral edges and muted micro labels; the dark
  * theme mirrors the in-app Obsidian graph view.
  */
 
@@ -15,6 +15,8 @@ export interface ObsidianTheme {
   edgeOpacity: number
   edgeTaxonomyOpacity: number
   label: string
+  focusLabel: string
+  dimmedLabelOpacity: number
   labelHalo: string
   dimmedOpacity: number
   highlightRing: string
@@ -33,8 +35,10 @@ export const OBSIDIAN_THEME: ObsidianTheme = {
   edgeOpacity: 0.4,
   edgeTaxonomyOpacity: 0.22,
   label: '#d4d4d4',
+  focusLabel: '#ededed',
+  dimmedLabelOpacity: 0.28,
   labelHalo: 'rgba(30, 30, 30, 0.85)',
-  dimmedOpacity: 0.16,
+  dimmedOpacity: 0.18,
   highlightRing: '#a882ff',
   brokenColor: '#8a8a94',
   fontFamily:
@@ -55,21 +59,23 @@ export const FALLBACK_PALETTE = [
 
 /**
  * Light theme matching the graph on obsidian.md: white background, dark dots,
- * translucent purple wikilink edges, light gray taxonomy edges, micro labels.
+ * subtle gray wikilink edges, light gray taxonomy edges, micro labels.
  */
 export const OBSIDIAN_LIGHT_THEME: ObsidianTheme = {
   ...OBSIDIAN_THEME,
   background: '#ffffff',
-  node: '#4c4d53',
-  focusNode: '#7c3aed',
+  node: '#5c5c5c',
+  focusNode: '#9164f5',
   nodeHaloOpacity: 0.08,
-  edge: 'rgba(139, 118, 196, 0.4)',
-  edgeTaxonomy: 'rgba(176, 176, 188, 0.28)',
-  edgeOpacity: 1,
-  edgeTaxonomyOpacity: 1,
+  edge: '#b8b8bc',
+  edgeTaxonomy: '#b8b8bc',
+  edgeOpacity: 0.45,
+  edgeTaxonomyOpacity: 0.25,
   label: '#8e8e96',
+  focusLabel: '#303030',
+  dimmedLabelOpacity: 0.28,
   labelHalo: 'rgba(255, 255, 255, 0.85)',
   dimmedOpacity: 0.18,
-  highlightRing: '#7c3aed',
+  highlightRing: '#9164f5',
   brokenColor: '#c06363',
 }

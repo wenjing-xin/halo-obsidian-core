@@ -2,7 +2,7 @@
  * Hand-written API client for the obsidian-core plugin endpoints plus the core
  * content lists used by the filter panels.
  */
-import { axiosInstance } from '@halo-dev/api-client'
+import { axiosInstance, consoleApiClient } from '@halo-dev/api-client'
 import type {
   BacklinksResult,
   GraphMode,
@@ -143,7 +143,7 @@ interface TaxonomyListResponse {
 export async function fetchCategoryOptions(): Promise<TaxonomyOption[]> {
   const { data } = await axiosInstance.get<TaxonomyListResponse>(
     '/apis/content.halo.run/v1alpha1/categories',
-    { params: { size: 0 } }
+    { params: { size: 0 } },
   )
   return (data.items ?? []).map((item) => ({
     name: item.metadata.name,
@@ -154,7 +154,7 @@ export async function fetchCategoryOptions(): Promise<TaxonomyOption[]> {
 export async function fetchTagOptions(): Promise<TaxonomyOption[]> {
   const { data } = await axiosInstance.get<TaxonomyListResponse>(
     '/apis/content.halo.run/v1alpha1/tags',
-    { params: { size: 0 } }
+    { params: { size: 0 } },
   )
   return (data.items ?? []).map((item) => ({
     name: item.metadata.name,
@@ -168,22 +168,24 @@ export interface PostBrief {
   permalink?: string
 }
 
-interface PostListResponse {
-  items: {
-    metadata: { name: string }
-    spec: { title?: string }
-    status?: { permalink?: string }
-  }[]
-}
-
-export async function searchPostBriefs(keyword: string): Promise<PostBrief[]> {
-  const { data } = await axiosInstance.get<PostListResponse>(
-    '/apis/content.halo.run/v1alpha1/posts',
-    { params: { size: 20, keyword: keyword || undefined } }
-  )
-  return (data.items ?? []).map((item) => ({
-    name: item.metadata.name,
-    title: item.spec.title || item.metadata.name,
-    permalink: item.status?.permalink,
-  }))
+export async function searchPostBriefs(
+  keyword: string,
+  options: { excludePostName?: string; publishedOnly?: boolean } = {},
+): Promise<PostBrief[]> {
+  // The generic extension list ignores keyword; Console's list supports title search.
+  const { data } = await consoleApiClient.content.post.listPosts({
+    size: 20,
+    keyword: keyword.trim() || undefined,
+    fieldSelector: [
+      'spec.deleted=false',
+      ...(options.excludePostName ? [`metadata.name!=${options.excludePostName}`] : []),
+      ...(options.publishedOnly ? ['spec.publish=true'] : []),
+    ],
+  })
+  return (data.items ?? []).map(({ post }) => ({
+    name: post.metadata.name,
+    title: post.spec.title || post.metadata.name,
+    permalink: post.status?.permalink,
+  })).filter((post) => post.name !== options.excludePostName
+    && (!options.publishedOnly || !!post.permalink))
 }

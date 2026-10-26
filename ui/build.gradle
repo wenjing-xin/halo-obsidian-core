@@ -26,7 +26,7 @@ tasks.register('pnpmBuild', PnpmTask) {
 tasks.register('pnpmCheck', PnpmTask) {
     group = 'verification'
     description = 'Run unit tests for the UI project using pnpm'
-    args = ['test:unit']
+    args = ['test:unit', '--run']
     dependsOn tasks.named('pnpmInstall')
 }
 

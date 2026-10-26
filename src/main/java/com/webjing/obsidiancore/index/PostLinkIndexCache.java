@@ -56,7 +56,8 @@ public class PostLinkIndexCache {
      * {@code caseSensitive} is true.
      */
     public Mono<Optional<PostTarget>> resolve(String title, boolean caseSensitive) {
-        return ensureLoaded().thenReturn(lookup(title, caseSensitive));
+        return Mono.defer(this::ensureLoaded)
+            .then(Mono.fromSupplier(() -> lookup(title, caseSensitive)));
     }
 
     /**
@@ -64,7 +65,8 @@ public class PostLinkIndexCache {
      * structured links inserted via the editor "文章关联" action.
      */
     public Mono<Optional<PostTarget>> resolveByName(String postName) {
-        return ensureLoaded().thenReturn(lookupByName(postName));
+        return Mono.defer(this::ensureLoaded)
+            .then(Mono.fromSupplier(() -> lookupByName(postName)));
     }
 
     /**
@@ -76,9 +78,9 @@ public class PostLinkIndexCache {
             return Optional.empty();
         }
         if (caseSensitive) {
-            return Optional.ofNullable(byTitle.get(title));
+            return Optional.ofNullable(byTitle.get(title.strip()));
         }
-        return Optional.ofNullable(byLowerCaseTitle.get(title.toLowerCase(Locale.ROOT)));
+        return Optional.ofNullable(byLowerCaseTitle.get(title.strip().toLowerCase(Locale.ROOT)));
     }
 
     /**
@@ -106,7 +108,7 @@ public class PostLinkIndexCache {
      * {@link #lookup(String, boolean)} calls, e.g. from the theme content handler.
      */
     public Mono<Void> warmup() {
-        return ensureLoaded();
+        return Mono.defer(this::ensureLoaded);
     }
 
     private Mono<Void> ensureLoaded() {

@@ -36,11 +36,12 @@ public class ObsidianGraphScriptInjector implements TemplateHeadProcessor {
     @Override
     public Mono<Void> process(ITemplateContext context, IModel model,
                               IElementModelStructureHandler structureHandler) {
-        if (!settings.isAllowAnonymousGraph()) {
-            return Mono.empty();
-        }
         final IModelFactory modelFactory = context.getModelFactory();
-        model.add(modelFactory.createText(obsidianGraphScript()));
+        model.add(modelFactory.createText("<link rel=\"stylesheet\" href=\""
+            + "/plugins/obsidian-core/assets/static/obsidian-links.css\">"));
+        if (settings.isAllowAnonymousGraph()) {
+            model.add(modelFactory.createText(obsidianGraphScript()));
+        }
         return Mono.empty();
     }
 

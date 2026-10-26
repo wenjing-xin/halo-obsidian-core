@@ -1,15 +1,15 @@
 <script setup lang="ts">
-  import { IconGitBranch, VCard, VPageHeader, VTabbar } from '@halo-dev/components'
-  import { ref } from 'vue'
-  import GraphView from './GraphView.vue'
-  import LinkView from './LinkView.vue'
+import { IconGitBranch, VCard, VPageHeader, VTabbar } from '@halo-dev/components'
+import { ref } from 'vue'
+import GraphView from './GraphView.vue'
+import LinkView from './LinkView.vue'
 
-  const activeTab = ref('graph')
+const activeTab = ref('graph')
 
-  const tabs = [
-    { id: 'graph', label: '关系图谱' },
-    { id: 'links', label: '双链管理' },
-  ]
+const tabs = [
+  { id: 'graph', label: '关系图谱' },
+  { id: 'links', label: '双链管理' },
+]
 </script>
 
 <template>
@@ -18,7 +18,7 @@
       <IconGitBranch />
     </template>
   </VPageHeader>
-  <VCard class="!m-0 !rounded-none !border-0 !shadow-none" :body-class="['!p-0']">
+  <VCard class="md:m-4" :body-class="['!p-0']">
     <template #header>
       <VTabbar v-model:active-id="activeTab" :items="tabs" type="outline" class="w-full" />
     </template>

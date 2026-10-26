@@ -1,18 +1,23 @@
 /**
  * Obsidian-style relationship graph renderer built on sigma.js (WebGL) +
- * graphology + ForceAtlas2, the same rendering/layout family as Obsidian's
- * native graph view. Shared by the Console graph view and the theme-side
+ * graphology + ForceAtlas2. Inspired by the documented Obsidian graph view,
+ * not its private implementation. Shared by the Console and theme-side
  * <obsidian-graph> component.
  */
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import { DEFAULT_PRIMITIVES } from 'sigma/primitives'
-import { type FragmentLayer } from 'sigma/rendering'
 import FA2LayoutSupervisor from 'graphology-layout-forceatlas2/worker'
 import type { ForceAtlas2Settings } from 'graphology-layout-forceatlas2'
 import type { Attributes } from 'graphology-types'
 import type { EdgeDisplayData, NodeDisplayData } from 'sigma/types'
-import { FALLBACK_PALETTE, OBSIDIAN_LIGHT_THEME, OBSIDIAN_THEME, type ObsidianTheme } from './obsidian-theme'
+import { DEFAULT_STYLES } from 'sigma/types'
+import {
+  FALLBACK_PALETTE,
+  OBSIDIAN_LIGHT_THEME,
+  OBSIDIAN_THEME,
+  type ObsidianTheme,
+} from './obsidian-theme'
 import type { EdgeType, GraphEdge, GraphNode, GraphPayload, NodeType } from './types'
 
 export interface RendererForces {
@@ -34,6 +39,8 @@ export interface RendererOptions {
   showTaxonomy: boolean
   showCategories: boolean
   showTags: boolean
+  showGroups: boolean
+  theme?: Partial<ObsidianTheme>
   /** Global label opacity (0 - 1), like Obsidian's text fade slider. */
   textFade: number
   /** Node radius multiplier (0.5 - 2). */
@@ -51,9 +58,6 @@ const DEFAULT_FORCES: RendererForces = { center: 0.15, repel: 2.2, link: 1, dist
 export type RendererOptionsInput = Partial<Omit<RendererOptions, 'forces'>> & {
   forces?: Partial<RendererForces>
 }
-
-/** UNSIGNED_BYTE; inlined to avoid touching WebGL2RenderingContext at module scope. */
-const GL_UNSIGNED_BYTE = 5121
 
 const SETTLE_MS = 8000
 const RESETTLE_MS = 3500
@@ -84,46 +88,9 @@ interface EdgeAttrs extends Attributes {
 
 type GraphT = Graph<NodeAttrs, EdgeAttrs>
 
-/**
- * Fragment layer rendering nodes as soft 3D spheres: a lit highlight toward
- * the top-left, the base color in the middle and a shaded rim, which mimics
- * the depth cues of Obsidian's WebGL graph nodes.
- */
-function createSphereLayer(): FragmentLayer {
-  return {
-    name: 'sphere',
-    uniforms: [],
-    attributes: [
-      { name: 'sphereColor', size: 4, type: GL_UNSIGNED_BYTE, normalized: true, source: 'color' },
-    ],
-    glsl: /* glsl */ `
-vec4 layer_sphere(vec4 v_sphereColor) {
-  float size = max(context.shapeSize, 1e-4);
-  vec2 p = context.uv / size;
-  float r = clamp(length(p), 0.0, 1.0);
-  vec3 base = v_sphereColor.rgb;
-  vec3 lightCol = mix(base, vec3(1.0), 0.72);
-  vec3 darkCol = mix(base, vec3(0.0), 0.30);
-  vec2 lightPos = vec2(-0.36, -0.40);
-  float d = clamp(length(p - lightPos), 0.0, 2.0);
-  float highlight = pow(clamp(1.0 - d * 0.85, 0.0, 1.0), 2.2);
-  vec3 col = mix(base, darkCol, smoothstep(0.45, 1.0, r));
-  col = mix(col, lightCol, highlight * 0.85);
-  col = mix(col, darkCol, smoothstep(0.82, 1.0, r) * 0.45);
-  return vec4(col, v_sphereColor.a);
-}`,
-  }
-}
-
 function nodeRadius(node: GraphNode): number {
-  switch (node.type) {
-    case 'category':
-      return 4 + Math.min(node.size, 9) * 0.9
-    case 'tag':
-      return 2 + Math.min(node.size, 7) * 0.6
-    default:
-      return node.broken ? 2 : 2.2 + Math.pow(Math.min(node.size, 24), 0.65) * 1.6
-  }
+  if (node.broken) return 2.2
+  return 2.6 + Math.min(5, Math.sqrt(Math.max(0, node.degree)) * 0.85)
 }
 
 function hexToRgb(color: string): { r: number; g: number; b: number } | null {
@@ -131,7 +98,10 @@ function hexToRgb(color: string): { r: number; g: number; b: number } | null {
   if (hex && hex[1]) {
     let h = hex[1]
     if (h.length === 3) {
-      h = h.split('').map((c) => c + c).join('')
+      h = h
+        .split('')
+        .map((c) => c + c)
+        .join('')
     }
     return {
       r: parseInt(h.slice(0, 2), 16),
@@ -215,6 +185,7 @@ export class GraphRenderer {
       showTaxonomy: true,
       showCategories: true,
       showTags: true,
+      showGroups: false,
       textFade: 1,
       nodeSize: 1,
       lineThickness: 1,
@@ -222,10 +193,14 @@ export class GraphRenderer {
       ...options,
       forces: { ...DEFAULT_FORCES, ...(options.forces ?? {}) },
     }
-    this.theme = this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME
+    this.theme = { ...(this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME), ...this.opts.theme }
     this.container.style.background = this.theme.background
 
-    this.graph = new Graph<NodeAttrs, EdgeAttrs>({ multi: false, allowSelfLoops: false, type: 'mixed' })
+    this.graph = new Graph<NodeAttrs, EdgeAttrs>({
+      multi: true,
+      allowSelfLoops: false,
+      type: 'directed',
+    })
     // FA2 writes coordinates back on every iteration; keep node sizes
     // proportional to the live average link distance (throttled).
     this.graph.on('eachNodeAttributesUpdated', () => {
@@ -237,11 +212,24 @@ export class GraphRenderer {
     })
 
     this.sigma = new Sigma(this.graph, this.container, {
+      styles: {
+        nodes: {
+          ...DEFAULT_STYLES.nodes,
+          // Sigma's hover backdrop is separate from the label background.
+          backdropVisibility: 'hidden',
+          backdropColor: 'transparent',
+          backdropShadowColor: 'transparent',
+          backdropShadowBlur: 0,
+          backdropPadding: 0,
+          labelBackgroundColor: 'transparent',
+          labelBackgroundPadding: 0,
+        },
+      },
       primitives: {
         ...DEFAULT_PRIMITIVES,
         nodes: {
           ...DEFAULT_PRIMITIVES.nodes,
-          layers: [createSphereLayer()],
+
           label: {
             margin: 4,
             font: {
@@ -253,15 +241,15 @@ export class GraphRenderer {
         },
       },
       settings: {
-        renderLabels: this.opts.showLabels,
+        renderLabels: true,
         renderEdgeLabels: false,
         enableEdgeEvents: false,
         enableNodeDrag: true,
         hideEdgesOnMove: false,
         hideLabelsOnMove: false,
-        labelDensity: 1.4,
+        labelDensity: 0.7,
         labelGridCellSize: 90,
-        labelRenderedSizeThreshold: 5,
+        labelRenderedSizeThreshold: 2,
         stagePadding: 30,
         minCameraRatio: 0.08,
         maxCameraRatio: 10,
@@ -275,12 +263,12 @@ export class GraphRenderer {
     this.sigma.on('clickNode', ({ node }) => {
       this.selectedKey = node
       this.opts.onSelect(this.graph.getNodeAttribute(node, 'ref') ?? null)
-      this.sigma.refresh()
+      this.setFocus(this.hoverKey)
     })
     this.sigma.on('clickStage', () => {
       this.selectedKey = null
       this.opts.onSelect(null)
-      this.sigma.refresh()
+      this.setFocus(null)
     })
     this.sigma.on('nodeDragStart', () => {
       this.layout?.stop()
@@ -291,6 +279,10 @@ export class GraphRenderer {
         this.scheduleSettle(RESETTLE_MS)
       }
     })
+
+    this.container.tabIndex = 0
+    this.container.setAttribute('aria-label', '关系图谱；加减键缩放，方向键平移')
+    this.container.addEventListener('keydown', this.onKeyDown)
 
     // Keep the WebGL canvas in sync when the container is resized
     // (e.g. the editor embed's drag-to-resize handles).
@@ -315,13 +307,13 @@ export class GraphRenderer {
       ...partialOpts,
       forces: { ...this.opts.forces, ...(partialOpts.forces ?? {}) },
     }
-    this.theme = this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME
+    this.theme = { ...(this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME), ...this.opts.theme }
     this.container.style.background = this.theme.background
 
     const nodes: GraphNode[] = payload.nodes.filter(
       (node) =>
         (node.type !== 'category' || this.opts.showCategories) &&
-        (node.type !== 'tag' || this.opts.showTags)
+        (node.type !== 'tag' || this.opts.showTags),
     )
     if (this.opts.showBroken) {
       nodes.push(...payload.brokenNodes)
@@ -341,7 +333,7 @@ export class GraphRenderer {
       if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target) || edge.source === edge.target) {
         continue
       }
-      const pair = [edge.source, edge.target].sort().join('→')
+      const pair = JSON.stringify([edge.type, edge.source, edge.target])
       if (seenPairs.has(pair)) {
         continue
       }
@@ -368,7 +360,7 @@ export class GraphRenderer {
     for (const node of nodes) {
       const attrs = {
         label: node.title,
-        baseColor: node.broken ? this.theme.brokenColor : this.theme.node,
+        baseColor: node.color || '',
         baseSize: nodeRadius(node),
         nodeType: node.type,
         broken: !!node.broken,
@@ -389,7 +381,7 @@ export class GraphRenderer {
     for (const [id, edge] of edgesById) {
       const attrs: EdgeAttrs = {
         edgeType: edge.type,
-        weight: edge.type === 'taxonomy' ? 0.7 : 1,
+        weight: edge.type === 'taxonomy' ? 1.2 : 1,
       }
       if (!this.graph.hasEdge(id)) {
         this.graph.addEdgeWithKey(id, edge.source, edge.target, attrs)
@@ -398,6 +390,15 @@ export class GraphRenderer {
       }
     }
 
+    if (this.selectedKey && !nodeIds.has(this.selectedKey)) this.selectedKey = null
+    if (this.hoverKey && !nodeIds.has(this.hoverKey)) this.hoverKey = null
+    for (const map of [this.nodeDim, this.nodeDimTarget, this.nodeScale, this.nodeScaleTarget]) {
+      for (const key of map.keys()) if (!nodeIds.has(key)) map.delete(key)
+    }
+    for (const map of [this.edgeDim, this.edgeDimTarget, this.edgeActive, this.edgeActiveTarget]) {
+      for (const key of map.keys()) if (!edgesById.has(key)) map.delete(key)
+    }
+    this.setFocus(this.hoverKey)
     this.updateAutoScale()
     this.restartLayout(this.graph.order > 0 ? SETTLE_MS : 0)
   }
@@ -415,9 +416,10 @@ export class GraphRenderer {
       ...partialOpts,
       forces: { ...this.opts.forces, ...(partialOpts.forces ?? {}) },
     }
-    this.theme = this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME
+    this.theme = { ...(this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME), ...this.opts.theme }
     this.container.style.background = this.theme.background
-    this.sigma.setSettings({ renderLabels: this.opts.showLabels })
+    // Keep the label pass active so hovered titles remain visible when labels are off.
+    this.sigma.setSettings({ renderLabels: true })
     if (partialOpts.forces) {
       this.applyForces(distanceChanged)
     }
@@ -431,15 +433,12 @@ export class GraphRenderer {
 
   setSelected(id: string | null): void {
     this.selectedKey = id
-    this.sigma.scheduleRefresh()
+    this.setFocus(this.hoverKey)
   }
 
   zoomBy(factor: number): void {
     const camera = this.sigma.getCamera()
-    void camera.animate(
-      { ratio: camera.getBoundedRatio(camera.ratio / factor) },
-      { duration: 160 }
-    )
+    void camera.animate({ ratio: camera.getBoundedRatio(camera.ratio / factor) }, { duration: 160 })
   }
 
   resetViewport(): void {
@@ -462,8 +461,27 @@ export class GraphRenderer {
     this.restartLayout(SETTLE_MS)
   }
 
+  private onKeyDown = (event: KeyboardEvent): void => {
+    if (event.target !== this.container) return
+    if (event.key === '+' || event.key === '=') this.zoomBy(1.25)
+    else if (event.key === '-') this.zoomBy(0.8)
+    else if (event.key.startsWith('Arrow')) {
+      const camera = this.sigma.getCamera()
+      const step = camera.ratio * (event.shiftKey ? 0.12 : 0.04)
+      void camera.animate(
+        {
+          x: camera.x + (event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0),
+          y: camera.y + (event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0),
+        },
+        { duration: 100 },
+      )
+    } else return
+    event.preventDefault()
+  }
+
   destroy(): void {
     this.destroyed = true
+    this.container.removeEventListener('keydown', this.onKeyDown)
     if (this.settleTimer) {
       clearTimeout(this.settleTimer)
       this.settleTimer = null
@@ -504,6 +522,8 @@ export class GraphRenderer {
   }
 
   private restartLayout(settleMs: number): void {
+    if (this.settleTimer) clearTimeout(this.settleTimer)
+    this.settleTimer = null
     this.layout?.kill()
     this.layout = null
     if (this.graph.order === 0 || this.destroyed) {
@@ -511,7 +531,8 @@ export class GraphRenderer {
     }
     this.layout = new FA2LayoutSupervisor<NodeAttrs, EdgeAttrs>(this.graph, {
       settings: this.fa2Settings(),
-      getEdgeWeight: (_edge, attrs) => ((attrs as EdgeAttrs | undefined)?.weight ?? 1) * this.weightMultiplier(),
+      getEdgeWeight: (_edge, attrs) =>
+        ((attrs as EdgeAttrs | undefined)?.weight ?? 1) * this.weightMultiplier(),
     })
     this.layout.start()
     if (settleMs > 0) {
@@ -526,12 +547,12 @@ export class GraphRenderer {
     if (distanceChanged) {
       // Edge weights are baked into the worker matrices at spawn time, so a
       // distance change requires a respawn; positions carry over seamlessly.
-      this.restartLayout(this.layout.isRunning() ? RESETTLE_MS : 0)
+      this.restartLayout(RESETTLE_MS)
       return
     }
     // gravity / scalingRatio / edgeWeightInfluence are sent to the worker on
     // every iteration, so mutating settings updates the simulation live.
-    (this.layout as unknown as { settings: ForceAtlas2Settings }).settings = this.fa2Settings()
+    ;(this.layout as unknown as { settings: ForceAtlas2Settings }).settings = this.fa2Settings()
     if (this.layout.isRunning()) {
       this.scheduleSettle(RESETTLE_MS)
     } else {
@@ -547,52 +568,8 @@ export class GraphRenderer {
     this.settleTimer = setTimeout(() => {
       this.layout?.stop()
       this.settleTimer = null
-      this.normalizePositions()
+      this.updateAutoScale()
     }, ms)
-  }
-
-  /**
-   * Rescale the settled layout around its centroid so the graph always ends
-   * up centered and compact: link lengths become uniform regardless of the
-   * raw ForceAtlas2 coordinate scale, and the camera reverts to the default
-   * "fit all" view. Outliers beyond the 98th-percentile radius are clamped so
-   * a single far-away node cannot stretch the whole graph.
-   */
-  private normalizePositions(): void {
-    if (this.destroyed || this.graph.order === 0) {
-      return
-    }
-    let cx = 0
-    let cy = 0
-    this.graph.forEachNode((_key, attrs) => {
-      cx += attrs.x
-      cy += attrs.y
-    })
-    cx /= this.graph.order
-    cy /= this.graph.order
-    const dists: number[] = []
-    this.graph.forEachNode((_key, attrs) => {
-      dists.push(Math.hypot(attrs.x - cx, attrs.y - cy))
-    })
-    dists.sort((a, b) => a - b)
-    const radius = dists[Math.floor(dists.length * 0.98)] || dists[dists.length - 1] || 1
-    const scale = NODE_SCALE_TARGET / Math.max(radius, 1e-6)
-    const maxRadius = NODE_SCALE_TARGET * 1.3
-    this.graph.updateEachNodeAttributes((_key, attrs) => {
-      let dx = (attrs.x - cx) * scale
-      let dy = (attrs.y - cy) * scale
-      const len = Math.hypot(dx, dy)
-      if (len > maxRadius && len > 0) {
-        dx = (dx / len) * maxRadius
-        dy = (dy / len) * maxRadius
-      }
-      attrs.x = cx + dx
-      attrs.y = cy + dy
-      return attrs
-    })
-    this.updateAutoScale()
-    void this.sigma.getCamera().animate({ x: 0.5, y: 0.5, ratio: 1 }, { duration: 250 })
-    this.sigma.refresh()
   }
 
   // ---------------------------------------------------------------------------
@@ -703,7 +680,11 @@ export class GraphRenderer {
 
     out.size = attrs.baseSize * this.opts.nodeSize * scale * this.autoScale
 
-    let color = attrs.broken ? theme.brokenColor : attrs.baseColor
+    let color = attrs.broken
+      ? theme.brokenColor
+      : this.opts.showGroups && attrs.baseColor
+        ? attrs.baseColor
+        : theme.node
     if (key === focus || key === this.selectedKey) {
       color = theme.focusNode
     } else if (this.highlightKeyword && attrs.label.toLowerCase().includes(this.highlightKeyword)) {
@@ -718,13 +699,22 @@ export class GraphRenderer {
       out.opacity = opacity
     }
 
-    const labelAlpha = this.opts.textFade * (1 - dim)
-    out.labelColor = withAlpha(theme.label, labelAlpha)
+    const related = !!focus && (key === focus || this.focusNeighbors.has(key))
+    const labelAlpha = this.opts.textFade * (1 - dim * (1 - theme.dimmedLabelOpacity))
+    out.labelColor = withAlpha(related ? theme.focusLabel : theme.label, labelAlpha)
     // Plain text right under the node, no card/background styling; the
     // focused node's title is always shown on hover.
     out.labelPosition = 'below'
     out.labelBackgroundColor = 'transparent'
-    out.labelVisibility = key === focus ? 'visible' : dim > 0.55 ? 'hidden' : 'auto'
+    out.labelBackgroundPadding = 0
+    out.labelVisibility =
+      key === focus || key === this.selectedKey
+        ? 'visible'
+        : !this.opts.showLabels
+          ? 'hidden'
+          : related
+            ? 'visible'
+            : 'auto'
 
     return out
   }
@@ -748,7 +738,8 @@ export class GraphRenderer {
       out.color = color
     }
 
-    const size = (isTaxonomy ? 0.5 : 0.8) * this.opts.lineThickness * (1 + active * 0.7) * this.autoScale
+    const size =
+      (isTaxonomy ? 0.5 : 0.8) * this.opts.lineThickness * (1 + active * 0.15) * this.autoScale
     if (Math.abs(size - data.size) > 0.001) {
       out.size = size
     }

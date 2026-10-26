@@ -1,9 +1,4 @@
-import {
-  Node,
-  mergeAttributes,
-  VueNodeViewRenderer,
-  ToolboxItem,
-} from '@halo-dev/richtext-editor'
+import { Node, mergeAttributes, VueNodeViewRenderer, ToolboxItem } from '@halo-dev/richtext-editor'
 import { IconDashboard } from '@halo-dev/components'
 import { markRaw } from 'vue'
 import GraphNodeView from './GraphNodeView.vue'
@@ -19,7 +14,7 @@ const NODE_NAME = 'obsidianGraph'
  * - editor toolbox ("插入关系图谱")
  * - slash command ("/关系图谱")
  * The graph range (full / local / nodes) is configured per block via the
- * NodeView's "配置" button, which opens GraphInsertModal.
+ * NodeView's "配置" button, which opens GraphInsertModal. New blocks require configuration before preview.
  */
 export const GraphNode = Node.create({
   name: NODE_NAME,
@@ -43,7 +38,7 @@ export const GraphNode = Node.create({
               editor
                 .chain()
                 .focus()
-                .insertContent({ type: NODE_NAME, attrs: { mode: 'full' } })
+                .insertContent({ type: NODE_NAME, attrs: { mode: 'local', configured: false } })
                 .run()
             },
           },
@@ -60,7 +55,7 @@ export const GraphNode = Node.create({
               .chain()
               .focus()
               .deleteRange(range)
-              .insertContent({ type: NODE_NAME, attrs: { mode: 'full' } })
+              .insertContent({ type: NODE_NAME, attrs: { mode: 'local', configured: false } })
               .run()
           },
         }
@@ -70,25 +65,32 @@ export const GraphNode = Node.create({
 
   addAttributes() {
     return {
+      configured: { default: true, rendered: false },
+      theme: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute('theme') },
       mode: {
         default: 'full',
-        parseHTML: (element: HTMLElement) => element.getAttribute('mode') || 'full',
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('mode') || element.getAttribute('data-mode') || 'full',
       },
       post: {
         default: '',
-        parseHTML: (element: HTMLElement) => element.getAttribute('post') || '',
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('post') || element.getAttribute('data-post') || '',
       },
       nodes: {
         default: '',
-        parseHTML: (element: HTMLElement) => element.getAttribute('nodes') || '',
+        parseHTML: (element: HTMLElement) =>
+          element.getAttribute('nodes') || element.getAttribute('data-nodes') || '',
       },
       depth: {
         default: 1,
-        parseHTML: (element: HTMLElement) => Number(element.getAttribute('depth')) || 1,
+        parseHTML: (element: HTMLElement) =>
+          Number(element.getAttribute('depth') || element.getAttribute('data-depth')) || 1,
       },
       dark: {
-        default: true,
-        parseHTML: (element: HTMLElement) => element.getAttribute('dark') !== 'false',
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          element.hasAttribute('dark') ? element.getAttribute('dark') !== 'false' : null,
       },
       height: {
         default: 360,
