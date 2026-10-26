@@ -7,7 +7,7 @@ export default definePlugin({
   components: {},
   routes: [
     {
-      parentName: 'Root',
+      parentName: 'PostsRoot',
       route: {
         path: '/graphs',
         name: 'ObsidianGraph',
@@ -17,15 +17,15 @@ export default definePlugin({
           searchable: true,
           menu: {
             name: '知识图谱',
-            group: '知识图谱',
+            group: 'content',
             icon: markRaw(IconDashboard),
-            priority: 0,
+            priority: 5,
           },
         },
       },
     },
     {
-      parentName: 'Root',
+      parentName: 'PostsRoot',
       route: {
         path: '/links',
         name: 'ObsidianLinks',
@@ -35,9 +35,9 @@ export default definePlugin({
           searchable: true,
           menu: {
             name: '双链管理',
-            group: '知识图谱',
+            group: 'content',
             icon: markRaw(IconLink),
-            priority: 1,
+            priority: 6,
           },
         },
       },

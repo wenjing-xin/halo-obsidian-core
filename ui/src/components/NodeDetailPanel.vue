@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { VButton, VTag } from '@halo-dev/components'
-import type { GraphNode } from '../shared/graph-renderer/types'
+  import { VButton, VTag } from '@halo-dev/components'
+  import type { GraphNode } from '../shared/graph-renderer/types'
 
-defineProps<{
-  node: GraphNode | null
-}>()
+  defineProps<{
+    node: GraphNode | null
+  }>()
 
-const emit = defineEmits<{
-  (e: 'close'): void
-  (e: 'view-backlinks', node: GraphNode): void
-  (e: 'open-post', node: GraphNode): void
-}>()
+  const emit = defineEmits<{
+    (e: 'close'): void
+    (e: 'view-backlinks', node: GraphNode): void
+    (e: 'open-post', node: GraphNode): void
+  }>()
 
-const typeLabel: Record<string, string> = {
-  post: '文章',
-  category: '分类',
-  tag: '标签',
-}
+  const typeLabel: Record<string, string> = {
+    post: '文章',
+    category: '分类',
+    tag: '标签',
+  }
 </script>
 
 <template>
@@ -26,7 +26,9 @@ const typeLabel: Record<string, string> = {
         {{ typeLabel[node.type] ?? node.type }}
       </span>
       <h3 class="node-panel__title" :title="node.title">{{ node.title }}</h3>
-      <button class="node-panel__close" aria-label="关闭" @click="emit('close')">×</button>
+      <VButton class="node-panel__close" size="sm" ghost aria-label="关闭" @click="emit('close')">
+        ×
+      </VButton>
     </div>
 
     <div class="node-panel__body">

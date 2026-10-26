@@ -26,6 +26,7 @@
     "vue-router": "~5.1.0"
   },
   "devDependencies": {
+    "@formkit/vue": "2.1.2",
     "@halo-dev/ui-plugin-bundler-kit": "^2.27.0",
     "@iconify-json/ri": "^1.2.10",
     "@tsconfig/node24": "^24.0.4",

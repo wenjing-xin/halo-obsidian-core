@@ -1,5 +1,13 @@
 <script setup lang="ts">
-  import { VButton, VDropdown, VDropdownItem, VSpace, IconSearch } from '@halo-dev/components'
+  import {
+    VButton,
+    VDropdown,
+    VDropdownItem,
+    VSpace,
+    VSwitch,
+  } from '@halo-dev/components'
+  import { FormKit } from '@formkit/vue'
+  import { ref, watch } from 'vue'
   import type { TaxonomyOption } from '../api/obsidian'
 
   const props = defineProps<{
@@ -35,15 +43,25 @@
     (e: 'reset-view'): void
   }>()
 
+  const keywordModel = ref(props.keyword)
+
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-  function onKeywordInput(event: Event) {
-    const value = (event.target as HTMLInputElement).value
+  watch(keywordModel, (value) => {
     if (debounceTimer) {
       clearTimeout(debounceTimer)
     }
     debounceTimer = setTimeout(() => emit('update:keyword', value), 300)
-  }
+  })
+
+  watch(
+    () => props.keyword,
+    (value) => {
+      if (value !== keywordModel.value) {
+        keywordModel.value = value
+      }
+    }
+  )
 
   function hasFilters(props_: typeof props) {
     return (
@@ -57,8 +75,7 @@
 <template>
   <div class="graph-toolbar">
     <div class="graph-toolbar__search">
-      <IconSearch />
-      <input :value="keyword" type="text" placeholder="搜索文章标题…" @input="onKeywordInput" />
+      <FormKit v-model="keywordModel" type="text" placeholder="搜索文章标题…" :outer-class="['!mb-0']" />
     </div>
 
     <VDropdown>
@@ -103,39 +120,35 @@
     <div class="graph-toolbar__spacer" />
 
     <div class="graph-toolbar__toggles">
-      <label>
-        <input type="checkbox" :checked="showBroken"
-          @change="emit('update:showBroken', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="showBroken" @update:model-value="(value: boolean) => emit('update:showBroken', value)" />
         断链
       </label>
-      <label>
-        <input type="checkbox" :checked="showTaxonomy"
-          @change="emit('update:showTaxonomy', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="showTaxonomy"
+          @update:model-value="(value: boolean) => emit('update:showTaxonomy', value)" />
         分类层级
       </label>
-      <label>
-        <input type="checkbox" :checked="expandParents"
-          @change="emit('update:expandParents', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="expandParents"
+          @update:model-value="(value: boolean) => emit('update:expandParents', value)" />
         展开父级分类
       </label>
-      <label>
-        <input type="checkbox" :checked="showCategories"
-          @change="emit('update:showCategories', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="showCategories"
+          @update:model-value="(value: boolean) => emit('update:showCategories', value)" />
         分类节点
       </label>
-      <label>
-        <input type="checkbox" :checked="showTags"
-          @change="emit('update:showTags', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="showTags" @update:model-value="(value: boolean) => emit('update:showTags', value)" />
         标签节点
       </label>
-      <label>
-        <input type="checkbox" :checked="showLabels"
-          @change="emit('update:showLabels', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="showLabels" @update:model-value="(value: boolean) => emit('update:showLabels', value)" />
         显示标签
       </label>
-      <label>
-        <input type="checkbox" :checked="showArrows"
-          @change="emit('update:showArrows', ($event.target as HTMLInputElement).checked)" />
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="showArrows" @update:model-value="(value: boolean) => emit('update:showArrows', value)" />
         箭头
       </label>
     </div>
@@ -165,23 +178,12 @@
 }
 
 .graph-toolbar__search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 32px;
-  min-width: 200px;
-  border: 1px solid var(--color-border, #dcdfe4);
-  border-radius: 6px;
-  background: var(--color-bg-2, #fafafa);
+  width: 200px;
 }
 
-.graph-toolbar__search input {
-  border: none;
-  outline: none;
-  background: transparent;
+.graph-toolbar__search :deep(.formkit-input) {
+  min-height: 32px;
   font-size: 13px;
-  width: 100%;
 }
 
 .graph-toolbar__spacer {
@@ -197,7 +199,7 @@
   color: var(--color-text-2, #4b5563);
 }
 
-.graph-toolbar__toggles label {
+.graph-toolbar__toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;

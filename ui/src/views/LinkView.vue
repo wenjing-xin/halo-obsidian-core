@@ -10,7 +10,8 @@
     VTag,
   } from '@halo-dev/components'
   import { IconLink, IconRefreshLine } from '@halo-dev/components'
-  import { onBeforeUnmount, onMounted, ref } from 'vue'
+  import { FormKit } from '@formkit/vue'
+  import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import {
     fetchBacklinks,
     fetchOutgoing,
@@ -68,13 +69,12 @@
 
   let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-  function onKeywordInput(event: Event) {
-    keyword.value = (event.target as HTMLInputElement).value
+  watch(keyword, () => {
     if (searchTimer) {
       clearTimeout(searchTimer)
     }
     searchTimer = setTimeout(searchPosts, 300)
-  }
+  })
 
   async function searchPosts() {
     if (!keyword.value.trim()) {
@@ -211,7 +211,7 @@
     <div v-if="activeTab === 'backlinks'" class="link-view__backlinks">
       <VCard :body-class="['!p-0']">
         <div class="link-view__search">
-          <input :value="keyword" type="text" placeholder="输入文章标题搜索，然后选择一篇文章查看其反向链接…" @input="onKeywordInput" />
+          <FormKit v-model="keyword" type="text" :outer-class="['!mb-0']" placeholder="输入文章标题搜索，然后选择一篇文章查看其反向链接…" />
         </div>
 
         <VLoading v-if="searching" />
