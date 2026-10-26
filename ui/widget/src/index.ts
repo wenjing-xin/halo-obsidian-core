@@ -23,6 +23,13 @@
  * CSS custom properties:
  *   --obsidian-graph-height  container height (default: 420px)
  */
+import {
+  GRAPH_MIN_WIDTH,
+  GRAPH_MIN_HEIGHT,
+  normalizeGraphHeight,
+  normalizeGraphWidth,
+  normalizeGraphAlignment,
+} from '../../src/shared/graph-renderer/embed-size'
 import { LitElement, css, html, nothing } from 'lit'
 import { GraphRenderer } from '../../src/shared/graph-renderer/renderer'
 import {
@@ -151,6 +158,10 @@ export class ObsidianGraphElement extends LitElement {
     :host {
       display: block;
       position: relative;
+      box-sizing: border-box;
+      min-width: min(320px, 100%);
+      max-width: 100%;
+      min-height: 300px;
       height: var(--obsidian-graph-height, 420px);
       border-radius: 8px;
       overflow: hidden;
@@ -314,15 +325,18 @@ export class ObsidianGraphElement extends LitElement {
    * emitted by the editor's renderHTML take precedence when already present.
    */
   private applySizing(): void {
-    if (this.height > 0) {
-      this.style.height = `${this.height}px`
+    this.style.minWidth = `min(${GRAPH_MIN_WIDTH}px, 100%)`
+    this.style.maxWidth = '100%'
+    this.style.minHeight = `${GRAPH_MIN_HEIGHT}px`
+    if (this.hasAttribute('height') || this.height !== 0) {
+      this.style.height = `${normalizeGraphHeight(this.height)}px`
     }
-    if (this.width >= 20 && this.width <= 100) {
-      this.style.width = `${this.width}%`
-      const align = this.align === 'left' || this.align === 'right' ? this.align : 'center'
-      this.style.marginLeft = align === 'left' ? '0' : 'auto'
-      this.style.marginRight = align === 'right' ? '0' : 'auto'
+    if (this.hasAttribute('width') || this.width !== 0) {
+      this.style.width = `${normalizeGraphWidth(this.width)}%`
     }
+    const align = normalizeGraphAlignment(this.align)
+    this.style.marginLeft = align === 'left' ? '0' : 'auto'
+    this.style.marginRight = align === 'right' ? '0' : 'auto'
   }
 
   private query(): string {
@@ -434,86 +448,86 @@ export class ObsidianGraphElement extends LitElement {
             aria-label="图谱设置"
             aria-expanded=${this.settingsOpen}
             @click=${() => {
-          this.settingsOpen = !this.settingsOpen
-          this.requestUpdate()
-        }}
+              this.settingsOpen = !this.settingsOpen
+              this.requestUpdate()
+            }}
           >
             ⚙
           </button>
         </div>
         ${
-        this.settingsOpen
-          ? html`<div class="settings">
-              <input
-                type="search"
-                aria-label="搜索节点"
-                placeholder="搜索节点…"
-                .value=${this.keyword}
-                @input=${(e: Event) => {
-          this.keyword = (e.target as HTMLInputElement).value
-          this.renderer?.setHighlight(this.keyword)
-        }}
-              />
-              <label
-                ><input
-                  type="checkbox"
-                  .checked=${this.showLabels}
-                  @change=${(e: Event) => {
-          this.showLabels = (e.target as HTMLInputElement).checked
-        }}
-                />显示名称</label
-              >
-              <label
-                ><input
-                  type="checkbox"
-                  .checked=${this.showArrows}
-                  @change=${(e: Event) => {
-          this.showArrows = (e.target as HTMLInputElement).checked
-        }}
-                />显示箭头</label
-              >
-              <label
-                ><input
-                  type="checkbox"
-                  .checked=${this.showTaxonomy}
-                  @change=${(e: Event) => {
-          this.showTaxonomy = (e.target as HTMLInputElement).checked
-        }}
-                />分类与标签</label
-              >
-              <label
-                ><input
-                  type="checkbox"
-                  .checked=${this.groups}
-                  @change=${(e: Event) => {
-          this.groups = (e.target as HTMLInputElement).checked
-          this.syncTheme()
-        }}
-                />分组颜色</label
-              >
-              <button @click=${() => this.renderer?.replay()}>重新布局</button>
-            </div>`
-          : nothing
-      }
+          this.settingsOpen
+            ? html`<div class="settings">
+                <input
+                  type="search"
+                  aria-label="搜索节点"
+                  placeholder="搜索节点…"
+                  .value=${this.keyword}
+                  @input=${(e: Event) => {
+                  this.keyword = (e.target as HTMLInputElement).value
+                  this.renderer?.setHighlight(this.keyword)
+                }}
+                />
+                <label
+                  ><input
+                    type="checkbox"
+                    .checked=${this.showLabels}
+                    @change=${(e: Event) => {
+                    this.showLabels = (e.target as HTMLInputElement).checked
+                  }}
+                  />显示名称</label
+                >
+                <label
+                  ><input
+                    type="checkbox"
+                    .checked=${this.showArrows}
+                    @change=${(e: Event) => {
+                    this.showArrows = (e.target as HTMLInputElement).checked
+                  }}
+                  />显示箭头</label
+                >
+                <label
+                  ><input
+                    type="checkbox"
+                    .checked=${this.showTaxonomy}
+                    @change=${(e: Event) => {
+                    this.showTaxonomy = (e.target as HTMLInputElement).checked
+                  }}
+                  />分类与标签</label
+                >
+                <label
+                  ><input
+                    type="checkbox"
+                    .checked=${this.groups}
+                    @change=${(e: Event) => {
+                    this.groups = (e.target as HTMLInputElement).checked
+                    this.syncTheme()
+                  }}
+                  />分组颜色</label
+                >
+                <button @click=${() => this.renderer?.replay()}>重新布局</button>
+              </div>`
+            : nothing
+        }
         ${this.status === 'ready' && this.payload?.truncated ? html`<div class="notice">节点数量已达上限，请缩小图谱范围</div>` : nothing}
         ${this.status === 'ready' && !this.payload?.nodes.length && !this.payload?.brokenNodes.length ? html`<div class="overlay">该范围内暂无公开文章</div>` : nothing}
         ${
-        this.status === 'loading' && !this.renderer
-          ? html`<div class="overlay">图谱加载中…</div>`
-          : nothing
-      }
+          this.status === 'loading' && !this.renderer
+            ? html`<div class="overlay">图谱加载中…</div>`
+            : nothing
+        }
         ${
-        this.status === 'forbidden'
-          ? html`<div class="overlay">
-              关系图谱未开放匿名访问，请在插件设置中开启「允许匿名访问图谱」。
-            </div>`
-          : nothing
-      }
+          this.status === 'forbidden'
+            ? html`<div class="overlay">
+                关系图谱未开放匿名访问，请在插件设置中开启「允许匿名访问图谱」。
+              </div>`
+            : nothing
+        }
         ${
-        this.status === 'error'
-          ? html`<div class="overlay">图谱加载失败：${this.errorMessage}</div>`
-          : nothing
-      }
+          this.status === 'error'
+            ? html`<div class="overlay">图谱加载失败：${this.errorMessage}</div>`
+            : nothing
+        }
       </div>
     `
   }

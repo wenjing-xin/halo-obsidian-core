@@ -86,3 +86,19 @@ it('keeps theme failure overlays readable in light mode', async () => {
     '--graph-bg:#ffffff',
   )
 })
+it('restores safe published embed dimensions and updates them without reloading', async () => {
+  const el = await mount({ width: '10', height: '20' })
+  expect(el.style.width).toBe('20%')
+  expect(el.style.minWidth).toBe('min(320px, 100%)')
+  expect(el.style.minHeight).toBe('300px')
+  expect(el.style.height).toBe('300px')
+  const calls = fetchMock.mock.calls.length
+  el.setAttribute('height', '560')
+  el.setAttribute('width', '80')
+  el.setAttribute('align', 'right')
+  await el.updateComplete
+  expect(el.style.height).toBe('560px')
+  expect(el.style.width).toBe('80%')
+  expect(el.style.marginRight).toBe('0px')
+  expect(fetchMock).toHaveBeenCalledTimes(calls)
+})

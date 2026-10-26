@@ -6,6 +6,12 @@ import { fetchConsoleGraphPreview } from '../api/obsidian'
 import ObsidianGraphCanvas from '../components/ObsidianGraphCanvas.vue'
 import type { GraphPayload } from '../shared/graph-renderer/types'
 import GraphInsertModal, { type GraphAttrs } from './GraphInsertModal.vue'
+import GraphResizeFrame from './GraphResizeFrame.vue'
+import {
+  normalizeGraphHeight,
+  normalizeGraphWidth,
+  normalizeGraphAlignment,
+} from '../shared/graph-renderer/embed-size'
 import {
   normalizeTheme,
   observeGraphTheme,
@@ -96,8 +102,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopTheme?.()
   fetchSeq++
-  window.removeEventListener('pointermove', onResizeMove)
-  window.removeEventListener('pointerup', endResize)
 })
 
 const isEmpty = computed(
@@ -114,29 +118,12 @@ const isEmpty = computed(
 
 const frameRef = ref<HTMLElement | null>(null)
 
-const liveHeight = ref<number | null>(null)
-const liveWidth = ref<number | null>(null)
-
-const height = computed(() => liveHeight.value ?? (Number(props.node?.attrs.height) || 360))
-const width = computed(() => liveWidth.value ?? (Number(props.node?.attrs.width) || 100))
-const align = computed(() => {
-  const value = props.node?.attrs.align
-  return value === 'left' || value === 'right' ? value : 'center'
-})
-
-const frameStyle = computed(() => ({
-  height: `${height.value}px`,
-  width: `${width.value}%`,
-  marginLeft: align.value === 'left' ? '0' : 'auto',
-  marginRight: align.value === 'right' ? '0' : 'auto',
-}))
-
-const frameClass = computed(() => [
-  'relative overflow-hidden rounded-[10px] border transition-colors',
-  props.selected
-    ? 'border-[rgba(124,184,255,0.65)] shadow-[0_0_0_3px_rgba(124,184,255,0.18)]'
-    : 'border-slate-400/25',
-])
+const height = computed(() => normalizeGraphHeight(props.node?.attrs.height))
+const width = computed(() => normalizeGraphWidth(props.node?.attrs.width))
+const align = computed(() => normalizeGraphAlignment(props.node?.attrs.align))
+function onResize(size: { width: number; height: number }) {
+  props.updateAttributes(size)
+}
 
 function setAlign(value: 'left' | 'center' | 'right') {
   props.updateAttributes({ align: value })
@@ -149,70 +136,6 @@ function alignBtnClass(option: 'left' | 'center' | 'right') {
       ? 'bg-[rgba(124,184,255,0.25)] text-[#7cb8ff]'
       : 'bg-transparent hover:bg-white/10 hover:text-gray-200',
   ]
-}
-
-const handleBase = 'group absolute z-[6] touch-none opacity-40 transition-opacity hover:opacity-100'
-
-const handleInnerClass = 'absolute inset-0.5 rounded bg-[rgba(124,184,255,0.9)]'
-
-type ResizeHandle = 'right' | 'bottom' | 'corner'
-
-interface ResizeSession {
-  handle: ResizeHandle
-  startX: number
-  startY: number
-  startWidth: number
-  startHeight: number
-  fullWidth: number
-}
-
-let session: ResizeSession | null = null
-
-function startResize(handle: ResizeHandle, event: PointerEvent) {
-  const frame = frameRef.value
-  if (!frame || !frame.parentElement) {
-    return
-  }
-  event.preventDefault()
-  event.stopPropagation()
-  session = {
-    handle,
-    startX: event.clientX,
-    startY: event.clientY,
-    startWidth: frame.clientWidth,
-    startHeight: frame.clientHeight,
-    fullWidth: frame.parentElement.clientWidth,
-  }
-  window.addEventListener('pointermove', onResizeMove)
-  window.addEventListener('pointerup', endResize, { once: true })
-}
-
-function onResizeMove(event: PointerEvent) {
-  if (!session) {
-    return
-  }
-  const dx = event.clientX - session.startX
-  const dy = event.clientY - session.startY
-  if (session.handle !== 'bottom' && session.fullWidth > 0) {
-    const percent = ((session.startWidth + dx) / session.fullWidth) * 100
-    liveWidth.value = Math.round(Math.min(100, Math.max(20, percent)))
-  }
-  if (session.handle !== 'right') {
-    liveHeight.value = Math.round(Math.min(1200, Math.max(200, session.startHeight + dy)))
-  }
-}
-
-function endResize() {
-  window.removeEventListener('pointermove', onResizeMove)
-  if (session && (liveWidth.value !== null || liveHeight.value !== null)) {
-    props.updateAttributes({
-      width: liveWidth.value ?? props.node?.attrs.width,
-      height: liveHeight.value ?? props.node?.attrs.height,
-    })
-  }
-  session = null
-  liveWidth.value = null
-  liveHeight.value = null
 }
 
 // ---------------------------------------------------------------------------
@@ -256,96 +179,72 @@ function closeConfig() {
 </script>
 
 <template>
-  <NodeViewWrapper as="div" class="my-2">
-    <div ref="frameRef" :class="frameClass" :style="frameStyle" @dblclick="modalVisible = true">
-      <ObsidianGraphCanvas
-        v-if="payload && !isEmpty && !loadError"
-        :payload="payload"
-        :dark="darkAttr"
-      />
-      <div
-        v-if="loading || loadError || isEmpty || currentPostPending"
-        class="absolute inset-0 flex items-center justify-center bg-slate-400/[0.08] p-4 text-center text-[13px] text-gray-400"
+  <NodeViewWrapper as="div" class="my-3" contenteditable="false">
+    <div ref="frameRef">
+      <GraphResizeFrame
+        :width="width"
+        :height="height"
+        :align="align"
+        :selected="props.selected"
+        :editable="props.editor.isEditable"
+        @resize="onResize"
       >
-        <span v-if="loading">图谱加载中…</span>
-        <span v-else-if="loadError">图谱加载失败：{{ loadError }}</span>
-        <span v-else-if="currentPostPending"
-          >当前文章局部图谱将在发布后自动绑定本文；可在配置中调整深度。</span
+        <template #actions>
+          <div class="flex gap-0.5">
+            <button
+              v-for="option in ['left', 'center', 'right'] as const"
+              :key="option"
+              type="button"
+              :class="alignBtnClass(option)"
+              :aria-label="
+                option === 'left' ? '左对齐图谱' : option === 'center' ? '居中图谱' : '右对齐图谱'
+              "
+              :title="option === 'left' ? '左对齐' : option === 'center' ? '居中' : '右对齐'"
+              @click="setAlign(option)"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <rect y="1.5" width="14" height="2" rx="1" fill="currentColor" />
+                <rect
+                  :x="option === 'left' ? 0 : option === 'center' ? 2.5 : 5"
+                  y="6"
+                  width="9"
+                  height="2"
+                  rx="1"
+                  fill="currentColor"
+                />
+                <rect
+                  :x="option === 'left' ? 0 : option === 'center' ? 3.5 : 7"
+                  y="10.5"
+                  width="7"
+                  height="2"
+                  rx="1"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+          </div>
+          <VButton size="sm" @click="modalVisible = true">配置</VButton>
+          <VButton size="sm" type="danger" @click="props.deleteNode()">删除</VButton>
+        </template>
+        <ObsidianGraphCanvas
+          v-if="payload && !isEmpty && !loadError"
+          :payload="payload"
+          :dark="darkAttr"
+        />
+        <div
+          v-if="loading || loadError || isEmpty || currentPostPending"
+          class="absolute inset-0 flex items-center justify-center bg-slate-400/[0.08] p-6 text-center text-[13px] text-gray-400"
         >
-        <span v-else>该范围内暂无图谱节点，双击可调整范围配置</span>
-      </div>
-
-      <div
-        v-if="props.selected"
-        class="absolute right-2 top-2 z-[5] flex items-center gap-1.5 rounded-lg bg-[rgba(30,32,38,0.85)] px-1.5 py-1 backdrop-blur-md"
-        @mousedown.stop
-      >
-        <div class="mr-0.5 flex gap-0.5">
-          <button
-            v-for="option in ['left', 'center', 'right'] as const"
-            :key="option"
-            type="button"
-            :class="alignBtnClass(option)"
-            :title="option === 'left' ? '左对齐' : option === 'center' ? '居中' : '右对齐'"
-            @click="setAlign(option)"
+          <span v-if="loading">图谱加载中…</span>
+          <span v-else-if="loadError">图谱加载失败：{{ loadError }}</span>
+          <span v-else-if="currentPostPending"
+            >当前文章局部图谱将在发布后自动绑定本文；可在配置中调整深度。</span
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect y="1.5" width="14" height="2" rx="1" fill="currentColor" />
-              <rect
-                :x="option === 'left' ? 0 : option === 'center' ? 2.5 : 5"
-                y="6"
-                width="9"
-                height="2"
-                rx="1"
-                fill="currentColor"
-              />
-              <rect
-                :x="option === 'left' ? 0 : option === 'center' ? 3.5 : 7"
-                y="10.5"
-                width="7"
-                height="2"
-                rx="1"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
+          <span v-else>该范围内暂无图谱节点，请在配置中调整范围。</span>
         </div>
-        <VButton size="sm" @click="modalVisible = true">配置</VButton>
-        <VButton size="sm" type="danger" @click="props.deleteNode()">删除</VButton>
-      </div>
-
-      <template v-if="props.selected">
-        <div
-          :class="[handleBase, 'right-[-5px] top-1/2 h-11 w-2.5 -translate-y-1/2 cursor-ew-resize']"
-          title="拖动调整宽度"
-          @pointerdown="startResize('right', $event)"
-        >
-          <span :class="handleInnerClass" />
-        </div>
-        <div
-          :class="[
-            handleBase,
-            'bottom-[-5px] left-1/2 h-2.5 w-11 -translate-x-1/2 cursor-ns-resize',
-          ]"
-          title="拖动调整高度"
-          @pointerdown="startResize('bottom', $event)"
-        >
-          <span :class="handleInnerClass" />
-        </div>
-        <div
-          :class="[handleBase, 'bottom-[-5px] right-[-5px] h-3.5 w-3.5 cursor-nwse-resize']"
-          title="拖动调整大小"
-          @pointerdown="startResize('corner', $event)"
-        >
-          <span :class="handleInnerClass" />
-        </div>
-      </template>
+      </GraphResizeFrame>
     </div>
-
-    <p class="mx-0.5 my-1.5 truncate text-xs text-gray-400">
-      关系图谱 · {{ summary }} · {{ width }}% × {{ height }}px
-    </p>
-
+    <p class="mx-0.5 my-1.5 truncate text-xs text-gray-400">关系图谱 · {{ summary }}</p>
     <GraphInsertModal
       :visible="modalVisible"
       :initial="props.node?.attrs"

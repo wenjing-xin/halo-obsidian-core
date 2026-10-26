@@ -3,6 +3,13 @@ import { VAlert, VButton, VModal, VLoading } from '@halo-dev/components'
 import { FormKit } from '@formkit/vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { searchPostBriefs, type PostBrief } from '../api/obsidian'
+import {
+  GRAPH_DEFAULT_HEIGHT,
+  GRAPH_MIN_HEIGHT,
+  GRAPH_MAX_HEIGHT,
+  normalizeGraphHeight,
+  normalizeGraphWidth,
+} from '../shared/graph-renderer/embed-size'
 import { normalizeTheme, type ThemeMode } from '../shared/graph-renderer/theme-controller'
 
 export interface GraphAttrs {
@@ -12,6 +19,8 @@ export interface GraphAttrs {
   depth: number
   theme: ThemeMode
   dark?: boolean | null
+  width: number
+  height: number
 }
 
 const props = defineProps<{
@@ -29,6 +38,8 @@ const post = ref('')
 const nodes = ref('')
 const depth = ref(1)
 const theme = ref<ThemeMode>('auto')
+const width = ref(100)
+const height = ref(GRAPH_DEFAULT_HEIGHT)
 const center = ref<'current' | 'selected'>('current')
 const searchError = ref('')
 const selectedNodes = computed(() =>
@@ -65,6 +76,8 @@ watch(
     post.value = props.initial?.post ?? ''
     nodes.value = props.initial?.nodes ?? ''
     depth.value = props.initial?.depth ?? 1
+    width.value = normalizeGraphWidth(props.initial?.width)
+    height.value = normalizeGraphHeight(props.initial?.height)
     theme.value = normalizeTheme(props.initial?.theme, props.initial?.dark)
     center.value = post.value ? 'selected' : 'current'
     searchError.value = ''
@@ -121,6 +134,8 @@ function confirm() {
     depth: Math.min(Math.max(Number(depth.value) || 1, 1), 5),
     theme: theme.value,
     dark: null,
+    width: normalizeGraphWidth(width.value),
+    height: normalizeGraphHeight(height.value),
   })
 }
 onBeforeUnmount(() => {
@@ -220,6 +235,27 @@ onBeforeUnmount(() => {
           { label: '暗黑', value: 'dark' },
         ]"
       />
+      <div class="grid grid-cols-2 gap-3">
+        <FormKit
+          v-model="width"
+          type="number"
+          label="宽度（%）"
+          :min="20"
+          :max="100"
+          :number="true"
+        />
+        <FormKit
+          v-model="height"
+          type="number"
+          label="高度（px）"
+          :min="GRAPH_MIN_HEIGHT"
+          :max="GRAPH_MAX_HEIGHT"
+          :number="true"
+        />
+      </div>
+      <p class="graph-modal__meta">
+        默认满宽 × 420px，最小 320 × 300px；窄屏自动贴合内容区域。插入后可拖动边缘或直接输入尺寸。
+      </p>
       <VAlert
         v-if="!valid"
         type="info"

@@ -28,3 +28,24 @@ it('uses the keyword-aware Console endpoint and unwraps ListedPost', async () =>
     fieldSelector: ['spec.deleted=false'],
   })
 })
+it('excludes the current article and non-navigable drafts in the link picker', async () => {
+  listPosts.mockResolvedValue({
+    data: {
+      items: ['current', 'other', 'draft'].map((name) => ({
+        post: {
+          metadata: { name },
+          spec: { title: name },
+          status: name === 'draft' ? {} : { permalink: `/${name}` },
+        },
+      })),
+    },
+  })
+  expect(await searchPostBriefs('', { excludePostName: 'current', publishedOnly: true })).toEqual([
+    { name: 'other', title: 'other', permalink: '/other' },
+  ])
+  expect(listPosts).toHaveBeenLastCalledWith({
+    size: 20,
+    keyword: undefined,
+    fieldSelector: ['spec.deleted=false', 'metadata.name!=current', 'spec.publish=true'],
+  })
+})

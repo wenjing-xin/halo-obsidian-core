@@ -2,6 +2,12 @@ import { Node, mergeAttributes, VueNodeViewRenderer, ToolboxItem } from '@halo-d
 import { IconDashboard } from '@halo-dev/components'
 import { markRaw } from 'vue'
 import GraphNodeView from './GraphNodeView.vue'
+import {
+  GRAPH_DEFAULT_HEIGHT,
+  graphEmbedStyle,
+  normalizeGraphHeight,
+  normalizeGraphWidth,
+} from '../shared/graph-renderer/embed-size'
 
 const NODE_NAME = 'obsidianGraph'
 
@@ -93,14 +99,13 @@ export const GraphNode = Node.create({
           element.hasAttribute('dark') ? element.getAttribute('dark') !== 'false' : null,
       },
       height: {
-        default: 360,
-        parseHTML: (element: HTMLElement) => Number(element.getAttribute('height')) || 360,
+        default: GRAPH_DEFAULT_HEIGHT,
+        parseHTML: (element: HTMLElement) => normalizeGraphHeight(element.getAttribute('height')),
       },
       width: {
         default: 100,
         parseHTML: (element: HTMLElement) => {
-          const value = Number(element.getAttribute('width')) || 100
-          return Math.min(100, Math.max(20, value))
+          return normalizeGraphWidth(element.getAttribute('width'))
         },
       },
       align: {
@@ -116,24 +121,22 @@ export const GraphNode = Node.create({
 
   renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: Record<string, unknown> }) {
     const attrs = node?.attrs ?? {}
-    const height = Number(attrs.height) || 360
-    const width = Math.min(100, Math.max(20, Number(attrs.width) || 100))
-    const align = attrs.align === 'left' || attrs.align === 'right' ? attrs.align : 'center'
-    const margin =
-      align === 'left'
-        ? 'margin-left: 0; margin-right: auto'
-        : align === 'right'
-          ? 'margin-left: auto; margin-right: 0'
-          : 'margin-left: auto; margin-right: auto'
+    const height = normalizeGraphHeight(attrs.height)
+    const width = normalizeGraphWidth(attrs.width)
     return [
       'obsidian-graph',
       mergeAttributes(HTMLAttributes, {
-        style: `display: block; height: ${height}px; width: ${width}%; ${margin}`,
+        height,
+        width,
+        style: graphEmbedStyle(width, height, attrs.align),
       }),
     ]
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(GraphNodeView)
+    return VueNodeViewRenderer(GraphNodeView, {
+      stopEvent: ({ event }) =>
+        event.target instanceof Element && !!event.target.closest('[data-graph-resize-ui]'),
+    })
   },
 })
