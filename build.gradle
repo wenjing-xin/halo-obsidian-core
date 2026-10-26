@@ -39,7 +39,9 @@ tasks.named('generatePluginComponentsIdx') {
 }
 
 halo {
-    version = '2.27'
+    port = 8098
+    version = "2.27"
+    containerName = "PluginObsidianCore"
 }
 
 tasks.register('processUiResources', Copy) {
@@ -47,6 +49,9 @@ tasks.register('processUiResources', Copy) {
     into layout.buildDirectory.dir('resources/main/ui')
     dependsOn project(':ui').tasks.named('assemble')
     shouldRunAfter tasks.named('processResources')
+    doFirst {
+        delete layout.buildDirectory.dir('resources/main/ui')
+    }
 }
 
 tasks.named('classes') {

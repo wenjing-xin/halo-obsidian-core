@@ -3,6 +3,10 @@ plugins {
     id "com.github.node-gradle.node" version "7.1.0"
 }
 
+node {
+    pnpmVersion = '10.33.0'
+}
+
 group 'com.webjing.obsidiancore.ui'
 
 tasks.register('pnpmBuild', PnpmTask) {
@@ -11,10 +15,12 @@ tasks.register('pnpmBuild', PnpmTask) {
     args = ['build']
     dependsOn tasks.named('pnpmInstall')
     inputs.dir(layout.projectDirectory.dir('src'))
+    inputs.dir(layout.projectDirectory.dir('widget'))
     inputs.files(fileTree(
         dir: layout.projectDirectory,
         includes: ['*.cjs', '*.ts', '*.js', '*.json', '*.yaml']))
     outputs.dir(layout.buildDirectory.dir('dist'))
+    outputs.dir(layout.projectDirectory.dir('../src/main/resources/static/obsidian-graph'))
 }
 
 tasks.register('pnpmCheck', PnpmTask) {

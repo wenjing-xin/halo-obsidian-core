@@ -1,6 +1,7 @@
 import { definePlugin } from '@halo-dev/ui-shared'
 import { IconDashboard, IconLink } from '@halo-dev/components'
 import { markRaw } from 'vue'
+import { GraphNode } from './editor/graph-node'
 
 export default definePlugin({
   components: {},
@@ -42,5 +43,7 @@ export default definePlugin({
       },
     },
   ],
-  extensionPoints: {},
+  extensionPoints: {
+    'default:editor:extension:create': () => [GraphNode],
+  },
 })

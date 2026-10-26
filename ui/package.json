@@ -3,7 +3,9 @@
   "type": "module",
   "scripts": {
     "build": "run-p type-check \"build-only {@}\" --",
-    "build-only": "vite build",
+    "build-only": "run-s build-only:app build-only:widget",
+    "build-only:app": "vite build",
+    "build-only:widget": "pnpm --filter obsidian-graph-widget run build",
     "dev": "vite build --watch --mode=development",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
@@ -15,6 +17,7 @@
   "dependencies": {
     "@halo-dev/api-client": "^2.27.0",
     "@halo-dev/components": "^2.27.0",
+    "@halo-dev/richtext-editor": "2.27.0",
     "@halo-dev/ui-shared": "^2.27.0",
     "axios": "^1.19.0",
     "canvas-confetti": "^1.9.4",
