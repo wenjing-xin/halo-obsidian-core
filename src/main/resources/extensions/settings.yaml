@@ -30,12 +30,12 @@ spec:
           attrs:
             type: heading
             level: 3
-          children: 知识图谱
+          children: 关系图谱
         - $formkit: checkbox
           name: allowAnonymousGraph
           label: 主题端匿名展示图谱
           value: false
-          help: 开启后未登录访客可在主题端查看知识图谱
+          help: 开启后未登录访客可在主题端查看关系图谱
         - $formkit: select
           name: anonymousGraphDefaultMode
           label: 内嵌图谱默认模式

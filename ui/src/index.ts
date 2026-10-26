@@ -13,10 +13,10 @@ export default definePlugin({
         name: 'ObsidianGraph',
         component: () => import(/* webpackChunkName: "GraphView" */ './views/GraphView.vue'),
         meta: {
-          title: '知识图谱',
+          title: '关系图谱',
           searchable: true,
           menu: {
-            name: '知识图谱',
+            name: '关系图谱',
             group: 'content',
             icon: markRaw(IconDashboard),
             priority: 5,

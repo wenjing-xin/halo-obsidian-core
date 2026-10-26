@@ -16,7 +16,7 @@ spec:
   repo: https://github.com/webjing/obsidian-core
   issues: https://github.com/webjing/obsidian-core/issues
   displayName: "obsidian-core"
-  description: "obsidian-core - 双链笔记与知识图谱"
+  description: "obsidian-core - 双链笔记与关系图谱"
   settingName: obsidian-core-settings
   configMapName: obsidian-core-configmap
   license:

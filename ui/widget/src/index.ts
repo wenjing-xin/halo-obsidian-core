@@ -256,7 +256,7 @@ export class ObsidianGraphElement extends LitElement {
         : nothing}
       ${this.status === 'forbidden'
         ? html`<div class="overlay">
-            知识图谱未开放匿名访问，请在插件设置中开启「允许匿名访问图谱」。
+            关系图谱未开放匿名访问，请在插件设置中开启「允许匿名访问图谱」。
           </div>`
         : nothing}
       ${this.status === 'error'

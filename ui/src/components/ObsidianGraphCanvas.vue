@@ -15,8 +15,8 @@ const props = withDefaults(
   }>(),
   {
     payload: null,
-    dark: true,
-    showLabels: false,
+    dark: false,
+    showLabels: true,
     showArrows: false,
     showCategories: true,
     showTags: true,
@@ -75,7 +75,14 @@ watch(
 )
 
 watch(
-  () => [props.dark, props.showLabels, props.showArrows, props.showCategories, props.showTags],
+  () => [props.dark, props.showLabels, props.showArrows],
+  () => {
+    renderer?.setOptions(currentOpts())
+  }
+)
+
+watch(
+  () => [props.showCategories, props.showTags],
   () => {
     if (renderer && props.payload) {
       renderer.setData(props.payload, currentOpts())

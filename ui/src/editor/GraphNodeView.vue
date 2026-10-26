@@ -51,7 +51,7 @@ function onConfirm(attrs: { mode: string; post: string; nodes: string; depth: nu
     <div class="graph-node-view__card">
       <div class="graph-node-view__icon">◈</div>
       <div class="graph-node-view__info">
-        <p class="graph-node-view__title">知识图谱</p>
+        <p class="graph-node-view__title">关系图谱</p>
         <p class="graph-node-view__summary">{{ summary }}</p>
       </div>
       <div class="graph-node-view__actions">
@@ -59,7 +59,7 @@ function onConfirm(attrs: { mode: string; post: string; nodes: string; depth: nu
         <VButton size="sm" type="danger" @click="props.deleteNode()">删除</VButton>
       </div>
     </div>
-    <p class="graph-node-view__hint">发布后将在文章中渲染为可交互的知识图谱。</p>
+    <p class="graph-node-view__hint">发布后将在文章中渲染为可交互的关系图谱。</p>
     <GraphInsertModal
       :visible="modalVisible"
       :initial="props.node?.attrs"

@@ -7,12 +7,13 @@
     "dev": "rslib build --watch"
   },
   "dependencies": {
+    "graphology": "^0.26.0",
+    "graphology-layout-forceatlas2": "^0.10.1",
     "lit": "^3.3.2",
-    "d3-force": "^3.0.0"
+    "sigma": "^4.0.3"
   },
   "devDependencies": {
     "@rslib/core": "^1.0.1",
-    "@types/d3-force": "^3.0.10",
     "typescript": "~6.0.0"
   }
 }

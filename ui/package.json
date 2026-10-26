@@ -21,7 +21,9 @@
     "@halo-dev/ui-shared": "^2.27.0",
     "axios": "^1.19.0",
     "canvas-confetti": "^1.9.4",
-    "d3-force": "^3.0.0",
+    "graphology": "^0.26.0",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "sigma": "^4.0.3",
     "vue": "^3.5.40",
     "vue-router": "~5.1.0"
   },
@@ -31,7 +33,6 @@
     "@iconify-json/ri": "^1.2.10",
     "@tsconfig/node24": "^24.0.4",
     "@types/canvas-confetti": "^1.9.0",
-    "@types/d3-force": "^3.0.10",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^24.13.3",
     "@vitejs/plugin-vue": "^6.0.8",

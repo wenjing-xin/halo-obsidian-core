@@ -5,6 +5,7 @@
     VDropdownItem,
     VSpace,
     VSwitch,
+    IconAddCircle,
   } from '@halo-dev/components'
   import { FormKit } from '@formkit/vue'
   import { ref, watch } from 'vue'
@@ -23,6 +24,7 @@
     showArrows: boolean
     showCategories: boolean
     showTags: boolean
+    dark: boolean
     reindexing: boolean
   }>()
 
@@ -38,9 +40,11 @@
     (e: 'update:showArrows', value: boolean): void
     (e: 'update:showCategories', value: boolean): void
     (e: 'update:showTags', value: boolean): void
+    (e: 'update:dark', value: boolean): void
     (e: 'reindex'): void
     (e: 'zoom', factor: number): void
     (e: 'reset-view'): void
+    (e: 'enlarge'): void
   }>()
 
   const keywordModel = ref(props.keyword)
@@ -151,11 +155,19 @@
         <VSwitch :model-value="showArrows" @update:model-value="(value: boolean) => emit('update:showArrows', value)" />
         箭头
       </label>
+      <label class="graph-toolbar__toggle">
+        <VSwitch :model-value="dark" @update:model-value="(value: boolean) => emit('update:dark', value)" />
+        深色背景
+      </label>
     </div>
 
     <div class="graph-toolbar__spacer" />
 
     <VSpace>
+      <VButton size="sm" @click="emit('enlarge')">
+        <IconAddCircle class="graph-toolbar__enlarge-icon" />
+        放大图谱
+      </VButton>
       <VButton size="sm" @click="emit('zoom', 1.25)">+</VButton>
       <VButton size="sm" @click="emit('zoom', 0.8)">−</VButton>
       <VButton size="sm" @click="emit('reset-view')">重置视图</VButton>
@@ -228,5 +240,11 @@
   padding: 8px 12px;
   font-size: 12px;
   color: var(--color-text-3, #9ca3af);
+}
+
+.graph-toolbar__enlarge-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
 }
 </style>

@@ -1,12 +1,14 @@
 /**
- * Obsidian-style visual specification for the knowledge graph renderer.
- * Values are tuned to mimic Obsidian's graph view: dark canvas, soft node glow,
- * thin translucent edges and a muted label style.
+ * Obsidian-style visual specification for the relationship graph renderer.
+ * The light theme mirrors the graph embedded on obsidian.md: a white canvas,
+ * small dark dots, translucent purple edges and muted micro labels; the dark
+ * theme mirrors the in-app Obsidian graph view.
  */
 
 export interface ObsidianTheme {
   background: string
   node: string
+  focusNode: string
   nodeHaloOpacity: number
   edge: string
   edgeTaxonomy: string
@@ -24,6 +26,7 @@ export interface ObsidianTheme {
 export const OBSIDIAN_THEME: ObsidianTheme = {
   background: '#1e1e1e',
   node: '#a6a6a6',
+  focusNode: '#a882ff',
   nodeHaloOpacity: 0.22,
   edge: '#8a8a8a',
   edgeTaxonomy: '#5f5f66',
@@ -32,7 +35,7 @@ export const OBSIDIAN_THEME: ObsidianTheme = {
   label: '#d4d4d4',
   labelHalo: 'rgba(30, 30, 30, 0.85)',
   dimmedOpacity: 0.1,
-  highlightRing: '#ffffff',
+  highlightRing: '#a882ff',
   brokenColor: '#8a8a94',
   fontFamily:
     '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
@@ -51,15 +54,22 @@ export const FALLBACK_PALETTE = [
 ]
 
 /**
- * Light-mode variant exposed to themes via CSS-variable overrides.
+ * Light theme matching the graph on obsidian.md: white background, dark dots,
+ * translucent purple wikilink edges, light gray taxonomy edges, micro labels.
  */
 export const OBSIDIAN_LIGHT_THEME: ObsidianTheme = {
   ...OBSIDIAN_THEME,
-  background: '#f2f3f5',
-  node: '#6b6b6b',
-  edge: '#9a9aa2',
-  edgeTaxonomy: '#b3b3bb',
-  label: '#3a3a3f',
-  labelHalo: 'rgba(242, 243, 245, 0.85)',
-  highlightRing: '#1a1a1e',
+  background: '#ffffff',
+  node: '#4c4d53',
+  focusNode: '#7c3aed',
+  nodeHaloOpacity: 0.08,
+  edge: 'rgba(139, 118, 196, 0.55)',
+  edgeTaxonomy: 'rgba(176, 176, 188, 0.35)',
+  edgeOpacity: 1,
+  edgeTaxonomyOpacity: 1,
+  label: '#8e8e96',
+  labelHalo: 'rgba(255, 255, 255, 0.85)',
+  dimmedOpacity: 0.12,
+  highlightRing: '#7c3aed',
+  brokenColor: '#c06363',
 }

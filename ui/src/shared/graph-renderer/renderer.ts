@@ -76,8 +76,6 @@ export class GraphRenderer {
   private dragging: { kind: 'node' | 'pan'; id?: string; lastX: number; lastY: number }
     | null = null
 
-  private frame = 0
-
   private width = 0
 
   private height = 0
@@ -94,7 +92,7 @@ export class GraphRenderer {
     }
     this.ctx = ctx
     this.opts = {
-      dark: true,
+      dark: false,
       showLabels: false,
       showArrows: false,
       showBroken: true,
@@ -161,8 +159,31 @@ export class GraphRenderer {
     this.startSimulation()
   }
 
+  /**
+   * Update display-only options (theme, labels, arrows) without restarting the
+   * physics simulation, so toggling the background is instant and jitter-free.
+   */
+  setOptions(partialOpts: Partial<RendererOptions> = {}): void {
+    this.opts = { ...this.opts, ...partialOpts }
+    this.theme = this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME
+    this.draw()
+  }
+
   private startSimulation(): void {
     this.sim?.stop()
+
+    // Seed new nodes in a tight cluster at the center. The simulation then
+    // expands them organically into the final layout, reproducing Obsidian's
+    // slow graph "growing" animation.
+    for (const node of this.simNodes) {
+      if (node.x === undefined || node.y === undefined) {
+        const angle = Math.random() * Math.PI * 2
+        const radius = Math.sqrt(Math.random()) * 30
+        node.x = Math.cos(angle) * radius
+        node.y = Math.sin(angle) * radius
+      }
+    }
+
     const hubCharge = (node: SimNode) =>
       node.ref.type === 'category' ? -140 : node.ref.type === 'tag' ? -60 : -30
     this.sim = forceSimulation<SimNode, SimLink>(this.simNodes)
@@ -185,17 +206,14 @@ export class GraphRenderer {
         'collide',
         forceCollide<SimNode>((node) => node.r + 3)
       )
-      .alpha(0.9)
+      // High friction + slow alpha decay makes the layout settle gradually
+      // (roughly 5-7 seconds) like Obsidian's graph view.
+      .velocityDecay(0.35)
+      .alpha(1)
+      .alphaDecay(0.012)
       .on('tick', () => {
         this.draw()
       })
-    this.sim.stop()
-    // Warm up a few ticks synchronously so the first paint is not a single blob.
-    for (let i = 0; i < 60; i++) {
-      this.sim.tick()
-    }
-    this.draw()
-    this.loop()
   }
 
   setHighlight(keyword: string): void {
@@ -243,17 +261,6 @@ export class GraphRenderer {
       this.viewportInitialized = true
     }
     this.draw()
-  }
-
-  private loop = (): void => {
-    if (this.destroyed) {
-      return
-    }
-    if (this.sim && this.sim.alpha() > (this.sim.alphaMin() ?? 0.001)) {
-      this.frame = requestAnimationFrame(this.loop)
-    } else {
-      this.frame = 0
-    }
   }
 
   private toWorld(px: number, py: number): { x: number; y: number } {
@@ -411,19 +418,27 @@ export class GraphRenderer {
         continue
       }
       const isTaxonomy = link.ref.type === 'taxonomy'
+      const connectedToFocus = !!focusId
+        && (source.ref.id === focusId || target.ref.id === focusId)
       const dimmed =
         neighbors && focusId
           ? source.ref.id !== focusId
             && target.ref.id !== focusId
             && !(neighbors.has(source.ref.id) && neighbors.has(target.ref.id))
           : false
-      ctx.globalAlpha = dimmed
-        ? theme.dimmedOpacity
-        : isTaxonomy
-          ? theme.edgeTaxonomyOpacity
-          : theme.edgeOpacity
-      ctx.strokeStyle = isTaxonomy ? theme.edgeTaxonomy : theme.edge
-      ctx.lineWidth = (isTaxonomy ? 0.5 : 1) / this.transform.k + 0.15
+      if (connectedToFocus && !isTaxonomy) {
+        ctx.globalAlpha = 0.85
+        ctx.strokeStyle = theme.focusNode
+        ctx.lineWidth = 1.2 / this.transform.k + 0.15
+      } else {
+        ctx.globalAlpha = dimmed
+          ? theme.dimmedOpacity
+          : isTaxonomy
+            ? theme.edgeTaxonomyOpacity
+            : theme.edgeOpacity
+        ctx.strokeStyle = isTaxonomy ? theme.edgeTaxonomy : theme.edge
+        ctx.lineWidth = (isTaxonomy ? 0.5 : 1) / this.transform.k + 0.15
+      }
       if (isTaxonomy) {
         ctx.setLineDash([2, 3])
       } else {
@@ -435,7 +450,7 @@ export class GraphRenderer {
       ctx.stroke()
 
       if (this.opts.showArrows && !isTaxonomy) {
-        drawArrow(ctx, source, target, theme.edge)
+        drawArrow(ctx, source, target, connectedToFocus ? theme.focusNode : theme.edge)
       }
       ctx.setLineDash([])
     }
@@ -450,29 +465,31 @@ export class GraphRenderer {
       const dimmed = neighbors
         ? node.ref.id !== focusId && !neighbors.has(node.ref.id)
         : false
-      const color = nodeColor(node.ref, theme)
+      const isFocus = node.ref.id === focusId || node.ref.id === this.selectedId
+      const color = isFocus ? theme.focusNode : nodeColor(node.ref, theme)
       const alpha = dimmed ? theme.dimmedOpacity : 1
 
       // Halo glow.
+      const bodyR = isFocus ? node.r * 1.6 : node.r
       ctx.globalAlpha = alpha * theme.nodeHaloOpacity
-      const glow = ctx.createRadialGradient(node.x, node.y, node.r * 0.5, node.x, node.y,
-        node.r * 3.2)
+      const glow = ctx.createRadialGradient(node.x, node.y, bodyR * 0.5, node.x, node.y,
+        bodyR * 3.2)
       glow.addColorStop(0, color)
       glow.addColorStop(1, 'rgba(0,0,0,0)')
       ctx.fillStyle = glow
       ctx.beginPath()
-      ctx.arc(node.x, node.y, node.r * 3.2, 0, Math.PI * 2)
+      ctx.arc(node.x, node.y, bodyR * 3.2, 0, Math.PI * 2)
       ctx.fill()
 
       // Body.
       ctx.globalAlpha = alpha
       ctx.fillStyle = color
       if (node.ref.type === 'category') {
-        roundRect(ctx, node.x - node.r, node.y - node.r, node.r * 2, node.r * 2, node.r * 0.4)
+        roundRect(ctx, node.x - bodyR, node.y - bodyR, bodyR * 2, bodyR * 2, bodyR * 0.4)
         ctx.fill()
       } else {
         ctx.beginPath()
-        ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2)
+        ctx.arc(node.x, node.y, bodyR, 0, Math.PI * 2)
         ctx.fill()
       }
 
@@ -521,9 +538,6 @@ export class GraphRenderer {
 
   destroy(): void {
     this.destroyed = true
-    if (this.frame) {
-      cancelAnimationFrame(this.frame)
-    }
     this.sim?.stop()
     this.resizeObserver?.disconnect()
     this.canvas.removeEventListener('pointerdown', this.onPointerDown)
