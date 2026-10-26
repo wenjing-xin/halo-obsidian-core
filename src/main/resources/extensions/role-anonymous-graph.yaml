@@ -4,8 +4,8 @@ metadata:
   name: anonymous-obsidian-core-graph
   labels:
     halo.run/role-template: "true"
-  annotations:
     rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+  annotations:
     halo.run/hidden: "true"
 rules:
   - apiGroups:

@@ -91,6 +91,23 @@ export function fetchPublicGraph(params: PublicGraphParams) {
   })
 }
 
+/**
+ * Authenticated scoped graph for the editor embed preview; mirrors the public
+ * endpoint semantics but does not depend on the anonymous-access setting.
+ */
+export function fetchConsoleGraphPreview(params: PublicGraphParams) {
+  return axiosInstance.get<GraphPayload>(`${CONSOLE_API}/graph/preview`, {
+    params: {
+      mode: params.mode,
+      post: params.post || undefined,
+      nodes: joinCsv(params.nodes),
+      depth: params.depth,
+      showBroken: params.showBroken,
+      showTaxonomy: params.showTaxonomy,
+    },
+  })
+}
+
 export function fetchBacklinks(postName: string) {
   return axiosInstance.get<BacklinksResult>(`${CONSOLE_API}/backlinks/${postName}`)
 }

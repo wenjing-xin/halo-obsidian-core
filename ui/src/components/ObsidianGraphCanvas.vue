@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { GraphRenderer } from '../shared/graph-renderer/renderer'
+import type { GraphRenderer, RendererForces } from '../shared/graph-renderer/renderer'
 import type { GraphNode, GraphPayload } from '../shared/graph-renderer/types'
 
 const props = withDefaults(
@@ -12,6 +12,10 @@ const props = withDefaults(
     showCategories?: boolean
     showTags?: boolean
     highlight?: string
+    textFade?: number
+    nodeSize?: number
+    lineThickness?: number
+    forces?: Partial<RendererForces>
   }>(),
   {
     payload: null,
@@ -21,6 +25,10 @@ const props = withDefaults(
     showCategories: true,
     showTags: true,
     highlight: '',
+    textFade: 1,
+    nodeSize: 1,
+    lineThickness: 1,
+    forces: () => ({}),
   }
 )
 
@@ -28,7 +36,7 @@ const emit = defineEmits<{
   (e: 'select', node: GraphNode | null): void
 }>()
 
-const canvasRef = ref<HTMLCanvasElement | null>(null)
+const containerRef = ref<HTMLElement | null>(null)
 
 let renderer: GraphRenderer | null = null
 
@@ -39,19 +47,23 @@ function currentOpts() {
     showArrows: props.showArrows,
     showCategories: props.showCategories,
     showTags: props.showTags,
+    textFade: props.textFade,
+    nodeSize: props.nodeSize,
+    lineThickness: props.lineThickness,
+    forces: { ...props.forces },
   }
 }
 
 async function mountRenderer() {
-  if (!canvasRef.value || renderer) {
+  if (!containerRef.value || renderer) {
     return
   }
-  // Dynamic import keeps d3-force in a separate chunk.
+  // Dynamic import keeps sigma/graphology in a separate lazy chunk.
   const { GraphRenderer: Renderer } = await import('../shared/graph-renderer/renderer')
-  if (!canvasRef.value || renderer) {
+  if (!containerRef.value || renderer) {
     return
   }
-  renderer = new Renderer(canvasRef.value, {
+  renderer = new Renderer(containerRef.value, {
     ...currentOpts(),
     onSelect: (node) => emit('select', node),
   })
@@ -75,10 +87,18 @@ watch(
 )
 
 watch(
-  () => [props.dark, props.showLabels, props.showArrows],
+  () => [props.dark, props.showLabels, props.showArrows, props.textFade, props.nodeSize, props.lineThickness],
   () => {
     renderer?.setOptions(currentOpts())
   }
+)
+
+watch(
+  () => props.forces,
+  (forces) => {
+    renderer?.setOptions({ forces: { ...forces } })
+  },
+  { deep: true }
 )
 
 watch(
@@ -110,18 +130,24 @@ function resetViewport() {
   renderer?.resetViewport()
 }
 
-defineExpose({ zoomBy, resetViewport })
+function replay() {
+  renderer?.replay()
+}
+
+defineExpose({ zoomBy, resetViewport, replay })
 </script>
 
 <template>
-  <canvas ref="canvasRef" class="obsidian-graph-canvas" />
+  <div ref="containerRef" class="obsidian-graph-canvas" />
 </template>
 
 <style scoped>
 .obsidian-graph-canvas {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   touch-action: none;
 }
 </style>

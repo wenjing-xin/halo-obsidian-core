@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { VAlert, VCard, VEmpty, VLoading, VModal } from '@halo-dev/components'
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { VAlert, VButton, VEmpty, VLoading, VModal, VSwitch } from '@halo-dev/components'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   fetchCategoryOptions,
   fetchConsoleGraph,
@@ -10,12 +10,12 @@ import {
 } from '../api/obsidian'
 import type { TaxonomyOption } from '../api/obsidian'
 import ObsidianGraphCanvas from '../components/ObsidianGraphCanvas.vue'
-import GraphToolbar from '../components/GraphToolbar.vue'
 import NodeDetailPanel from '../components/NodeDetailPanel.vue'
 import BacklinksModal from '../components/BacklinksModal.vue'
 import type { GraphNode, GraphPayload } from '../shared/graph-renderer/types'
 
 const canvasRef = ref<InstanceType<typeof ObsidianGraphCanvas> | null>(null)
+const modalCanvasRef = ref<InstanceType<typeof ObsidianGraphCanvas> | null>(null)
 
 const payload = ref<GraphPayload | null>(null)
 const loading = ref(false)
@@ -24,6 +24,8 @@ const error = ref('')
 const selected = ref<GraphNode | null>(null)
 const backlinksTarget = ref<{ name: string; title: string } | null>(null)
 const enlarged = ref(false)
+const panelOpen = ref(true)
+const sections = reactive({ filters: true, display: true, forces: true })
 
 const categoryOptions = ref<TaxonomyOption[]>([])
 const tagOptions = ref<TaxonomyOption[]>([])
@@ -45,7 +47,97 @@ const visual = reactive({
   showTags: true,
 })
 
+// Appearance sliders (Obsidian "外观" section), stored in slider units.
+const appearance = reactive({
+  textFade: 100,
+  nodeSize: 100,
+  lineThickness: 100,
+})
+
+// Force sliders (Obsidian "力度" section), stored in slider units.
+const forceSliders = reactive({
+  center: 16,
+  repel: 26,
+  link: 50,
+  distance: 55,
+})
+
+const textFade = computed(() => Number(appearance.textFade) / 100)
+const nodeSize = computed(() => Number(appearance.nodeSize) / 100)
+const lineThickness = computed(() => Number(appearance.lineThickness) / 100)
+const forceOptions = computed(() => ({
+  center: (Number(forceSliders.center) / 100) * 0.5,
+  repel: 0.5 + (Number(forceSliders.repel) / 100) * 7.5,
+  link: (Number(forceSliders.link) / 100) * 2,
+  distance: Number(forceSliders.distance),
+}))
+
+const categorySelectOptions = computed(() =>
+  categoryOptions.value.map((option) => ({ label: option.displayName, value: option.name }))
+)
+const tagSelectOptions = computed(() =>
+  tagOptions.value.map((option) => ({ label: option.displayName, value: option.name }))
+)
+
+const hasFilters = computed(
+  () =>
+    filters.selectedCategories.length > 0 ||
+    filters.selectedTags.length > 0 ||
+    filters.keyword.trim() !== ''
+)
+
 const summary = ref<Awaited<ReturnType<typeof fetchSummary>>['data'] | null>(null)
+
+// ---------------------------------------------------------------------------
+// UnoCSS class groups (light/dark aware)
+// ---------------------------------------------------------------------------
+
+const iconBtnClass = computed(() => [
+  'inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border p-0 backdrop-blur-md transition-colors disabled:cursor-default disabled:opacity-50',
+  visual.dark
+    ? 'border-white/10 bg-neutral-800/85 text-gray-400 hover:bg-neutral-700/95 hover:text-gray-200'
+    : 'border-slate-900/[0.08] bg-white/85 text-gray-500 hover:bg-white hover:text-gray-900',
+])
+
+const zoomBtnClass = computed(() => [...iconBtnClass.value, 'text-sm'])
+
+const panelClass = computed(() => [
+  'absolute bottom-3 right-3 top-3 z-[5] flex w-[264px] flex-col overflow-hidden rounded-[10px] border shadow-lg backdrop-blur-lg',
+  visual.dark
+    ? 'border-white/10 bg-neutral-900/90 shadow-black/40'
+    : 'border-slate-900/[0.08] bg-white/90 shadow-slate-900/[0.08]',
+])
+
+const sectionClass = computed(() => [
+  'border-t',
+  visual.dark ? 'border-white/[0.08]' : 'border-slate-900/[0.07]',
+])
+
+const sectionHeaderClass = computed(() => [
+  'flex w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-2.5 text-left text-[13px] font-semibold',
+  visual.dark ? 'text-gray-200' : 'text-gray-800',
+])
+
+const sectionBodyClass = computed(() => [
+  'flex flex-col gap-2 px-3 pb-3 text-xs',
+  visual.dark ? 'text-gray-400' : 'text-gray-600',
+])
+
+const emptyClass = computed(() => [
+  'absolute inset-0 z-[2] flex items-center justify-center',
+  visual.dark ? 'bg-neutral-800/90' : 'bg-white/90',
+])
+
+function chevronClass(open: boolean) {
+  return [
+    'h-3 w-3 text-gray-400 transition-transform duration-200',
+    open ? 'rotate-90' : '',
+  ]
+}
+
+// ---------------------------------------------------------------------------
+// Data loading
+// ---------------------------------------------------------------------------
 
 async function load() {
   loading.value = true
@@ -67,6 +159,21 @@ async function load() {
   }
 }
 
+let filterTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  filters,
+  () => {
+    if (filterTimer) {
+      clearTimeout(filterTimer)
+    }
+    filterTimer = setTimeout(() => {
+      load()
+    }, 300)
+  },
+  { deep: true }
+)
+
 async function loadFilterOptions() {
   try {
     const [categories, tags] = await Promise.all([fetchCategoryOptions(), fetchTagOptions()])
@@ -82,24 +189,6 @@ async function loadSummary() {
     summary.value = (await fetchSummary()).data
   } catch {
     // ignore
-  }
-}
-
-function toggleCategory(name: string) {
-  const index = filters.selectedCategories.indexOf(name)
-  if (index >= 0) {
-    filters.selectedCategories.splice(index, 1)
-  } else {
-    filters.selectedCategories.push(name)
-  }
-}
-
-function toggleTag(name: string) {
-  const index = filters.selectedTags.indexOf(name)
-  if (index >= 0) {
-    filters.selectedTags.splice(index, 1)
-  } else {
-    filters.selectedTags.push(name)
   }
 }
 
@@ -154,6 +243,11 @@ function resetView() {
   canvasRef.value?.resetViewport()
 }
 
+function replay() {
+  canvasRef.value?.replay()
+  modalCanvasRef.value?.replay()
+}
+
 onMounted(() => {
   load()
   loadFilterOptions()
@@ -164,74 +258,218 @@ onBeforeUnmount(() => {
   if (pollTimer) {
     clearInterval(pollTimer)
   }
+  if (filterTimer) {
+    clearTimeout(filterTimer)
+  }
 })
 </script>
 
 <template>
-  <div class="graph-view">
-    <GraphToolbar
-      v-model:keyword="filters.keyword"
-      :category-options="categoryOptions"
-      :tag-options="tagOptions"
-      :selected-categories="filters.selectedCategories"
-      :selected-tags="filters.selectedTags"
-      v-model:show-broken="filters.showBroken"
-      v-model:show-taxonomy="filters.showTaxonomy"
-      v-model:expand-parents="filters.expandParents"
-      v-model:dark="visual.dark"
-      v-model:show-labels="visual.showLabels"
-      v-model:show-arrows="visual.showArrows"
-      v-model:show-categories="visual.showCategories"
-      v-model:show-tags="visual.showTags"
-      :reindexing="reindexing"
-      @toggle-category="toggleCategory"
-      @toggle-tag="toggleTag"
-      @clear-filters="clearFilters"
-      @reindex="reindex"
-      @zoom="zoom"
-      @reset-view="resetView"
-      @enlarge="enlarged = true"
-    />
-
+  <div class="flex h-[calc(100vh-16rem)] flex-col">
     <VAlert
       v-if="error"
-      class="graph-view__alert"
+      class="mx-3 mt-3 shrink-0"
       type="error"
       :title="error"
       :closable="false"
     />
 
-    <VCard class="graph-view__card" :body-class="['!p-0']">
-      <div class="graph-view__stage">
-        <VLoading v-if="loading && !payload" class="graph-view__loading" />
-        <VEmpty
-          v-else-if="payload && !payload.nodes.length"
-          class="graph-view__empty"
-          title="暂无图谱数据"
-          message="发布包含 [[双链]] 的文章后，这里会展示关系图谱。"
-        />
-        <ObsidianGraphCanvas
-          ref="canvasRef"
-          :payload="payload"
-          :dark="visual.dark"
-          :show-labels="visual.showLabels"
-          :show-arrows="visual.showArrows"
-          :show-categories="visual.showCategories"
-          :show-tags="visual.showTags"
-          :highlight="filters.keyword"
-          @select="onSelect"
-        />
-        <div v-if="payload?.truncated" class="graph-view__truncated">
-          节点较多，已截断展示。可使用筛选或调大设置中的节点上限。
-        </div>
-        <NodeDetailPanel
-          :node="selected"
-          @close="selected = null"
-          @view-backlinks="viewBacklinks"
-          @open-post="openPost"
-        />
+    <div class="relative min-h-[360px] flex-1 overflow-hidden">
+      <VLoading v-if="loading && !payload" class="absolute inset-0 z-[2] bg-gray-500/[0.12]" />
+      <VEmpty
+        v-else-if="payload && !payload.nodes.length"
+        :class="emptyClass"
+        title="暂无图谱数据"
+        message="发布包含 [[双链]] 的文章后，这里会展示关系图谱。"
+      />
+      <ObsidianGraphCanvas
+        ref="canvasRef"
+        :payload="payload"
+        :dark="visual.dark"
+        :show-labels="visual.showLabels"
+        :show-arrows="visual.showArrows"
+        :show-categories="visual.showCategories"
+        :show-tags="visual.showTags"
+        :highlight="filters.keyword"
+        :text-fade="textFade"
+        :node-size="nodeSize"
+        :line-thickness="lineThickness"
+        :forces="forceOptions"
+        @select="onSelect"
+      />
+      <div
+        v-if="payload?.truncated"
+        class="absolute bottom-3 left-3 z-[3] rounded-md bg-[rgba(24,26,31,0.85)] px-2.5 py-1.5 text-xs text-[#ffc46b]"
+      >
+        节点较多，已截断展示。可使用筛选或调大设置中的节点上限。
       </div>
-    </VCard>
+
+      <!-- Obsidian-style collapsed floating controls -->
+      <div v-if="!panelOpen" class="absolute right-3 top-3 z-[5] flex flex-col items-end gap-2">
+        <button type="button" :class="iconBtnClass" title="图谱设置" @click="panelOpen = true">
+          <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <button type="button" :class="iconBtnClass" title="放大图谱" @click="enlarged = true">
+          <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+          </svg>
+        </button>
+        <VButton type="primary" size="sm" @click="replay">播放关系图谱生长动画</VButton>
+      </div>
+
+      <!-- Obsidian-style settings panel -->
+      <aside v-else :class="panelClass">
+        <div class="flex items-center justify-end px-2.5 pb-1 pt-2">
+          <div class="inline-flex gap-1.5">
+            <button
+              type="button"
+              :class="iconBtnClass"
+              title="重新索引"
+              :disabled="reindexing"
+              @click="reindex"
+            >
+              <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" />
+              </svg>
+            </button>
+            <button type="button" :class="iconBtnClass" title="放大图谱" @click="enlarged = true">
+              <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+              </svg>
+            </button>
+            <button type="button" :class="iconBtnClass" title="收起面板" @click="panelOpen = false">
+              <svg class="h-[15px] w-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto pb-2.5">
+          <section :class="sectionClass">
+            <button type="button" :class="sectionHeaderClass" @click="sections.filters = !sections.filters">
+              <svg :class="chevronClass(sections.filters)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              <span>筛选</span>
+            </button>
+            <div v-show="sections.filters" :class="sectionBodyClass">
+              <FormKit
+                v-model="filters.keyword"
+                type="text"
+                placeholder="搜索文件…"
+                :outer-class="['!mb-0']"
+              />
+              <FormKit
+                v-if="categorySelectOptions.length"
+                v-model="filters.selectedCategories"
+                type="select"
+                multiple
+                label="分类"
+                :options="categorySelectOptions"
+              />
+              <FormKit
+                v-if="tagSelectOptions.length"
+                v-model="filters.selectedTags"
+                type="select"
+                multiple
+                label="标签"
+                :options="tagSelectOptions"
+              />
+              <div class="flex items-center justify-between gap-2">
+                <span>标签节点</span>
+                <VSwitch v-model="visual.showTags" />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span>分类节点</span>
+                <VSwitch v-model="visual.showCategories" />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span>仅显示已创建的笔记</span>
+                <VSwitch :model-value="!filters.showBroken" @update:model-value="(value: boolean) => (filters.showBroken = !value)" />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span>分类层级</span>
+                <VSwitch v-model="filters.showTaxonomy" />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span>展开父级分类</span>
+                <VSwitch v-model="filters.expandParents" />
+              </div>
+              <button
+                v-if="hasFilters"
+                type="button"
+                class="cursor-pointer self-start border-0 bg-transparent p-0 text-xs text-[#4cc2ba] hover:underline"
+                @click="clearFilters"
+              >
+                清除筛选
+              </button>
+            </div>
+          </section>
+
+          <section :class="sectionClass">
+            <button type="button" :class="sectionHeaderClass" @click="sections.display = !sections.display">
+              <svg :class="chevronClass(sections.display)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              <span>外观</span>
+            </button>
+            <div v-show="sections.display" :class="sectionBodyClass">
+              <div class="flex items-center justify-between gap-2">
+                <span>深色背景</span>
+                <VSwitch v-model="visual.dark" />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span>箭头</span>
+                <VSwitch v-model="visual.showArrows" />
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <span>显示标签</span>
+                <VSwitch v-model="visual.showLabels" />
+              </div>
+              <FormKit v-model="appearance.textFade" type="range" min="0" max="100" step="1" label="文本透明度" />
+              <FormKit v-model="appearance.nodeSize" type="range" min="40" max="200" step="1" label="节点大小" />
+              <FormKit v-model="appearance.lineThickness" type="range" min="30" max="250" step="1" label="连线粗细" />
+              <VButton type="primary" block @click="replay">播放动画</VButton>
+            </div>
+          </section>
+
+          <section :class="sectionClass">
+            <button type="button" :class="sectionHeaderClass" @click="sections.forces = !sections.forces">
+              <svg :class="chevronClass(sections.forces)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              <span>力度</span>
+            </button>
+            <div v-show="sections.forces" :class="sectionBodyClass">
+              <FormKit v-model="forceSliders.center" type="range" min="0" max="100" step="1" label="图谱向心力" />
+              <FormKit v-model="forceSliders.repel" type="range" min="0" max="100" step="1" label="节点间的排斥力" />
+              <FormKit v-model="forceSliders.link" type="range" min="0" max="100" step="1" label="相连节点间的吸引力" />
+              <FormKit v-model="forceSliders.distance" type="range" min="20" max="120" step="1" label="连线长度" />
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <div
+        class="absolute bottom-3 z-[4] flex flex-col gap-1.5"
+        :class="panelOpen ? 'right-[288px]' : 'right-3'"
+      >
+        <button type="button" :class="zoomBtnClass" title="放大" @click="zoom(1.25)">+</button>
+        <button type="button" :class="zoomBtnClass" title="缩小" @click="zoom(0.8)">−</button>
+        <button type="button" :class="zoomBtnClass" title="重置视图" @click="resetView">⟲</button>
+      </div>
+
+      <NodeDetailPanel
+        :node="selected"
+        @close="selected = null"
+        @view-backlinks="viewBacklinks"
+        @open-post="openPost"
+      />
+    </div>
 
     <VModal
       :visible="enlarged"
@@ -239,8 +477,9 @@ onBeforeUnmount(() => {
       title="关系图谱"
       @close="enlarged = false"
     >
-      <div class="graph-view__modal-stage">
+      <div class="relative h-[75vh] overflow-hidden rounded-lg">
         <ObsidianGraphCanvas
+          ref="modalCanvasRef"
           :payload="payload"
           :dark="visual.dark"
           :show-labels="visual.showLabels"
@@ -248,11 +487,12 @@ onBeforeUnmount(() => {
           :show-categories="visual.showCategories"
           :show-tags="visual.showTags"
           :highlight="filters.keyword"
+          :text-fade="textFade"
+          :node-size="nodeSize"
+          :line-thickness="lineThickness"
+          :forces="forceOptions"
           @select="onSelect"
         />
-        <div v-if="payload?.truncated" class="graph-view__truncated">
-          节点较多，已截断展示。可使用筛选或调大设置中的节点上限。
-        </div>
       </div>
     </VModal>
 
@@ -263,73 +503,3 @@ onBeforeUnmount(() => {
     />
   </div>
 </template>
-
-<style scoped>
-.graph-view {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: calc(100vh - 5rem);
-}
-
-.graph-view__alert {
-  margin: 0;
-}
-
-.graph-view__card {
-  flex: 1;
-  min-height: 360px;
-  overflow: hidden;
-}
-
-.graph-view__card:deep(.card-wrapper),
-.graph-view__card:deep(.card-body) {
-  height: 100%;
-}
-
-.graph-view__card:deep(.card-body) {
-  overflow: hidden;
-}
-
-.graph-view__stage {
-  position: relative;
-  height: 100%;
-  min-height: 360px;
-  overflow: hidden;
-}
-
-.graph-view__modal-stage {
-  position: relative;
-  height: 75vh;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.graph-view__loading {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: rgba(128, 128, 128, 0.12);
-}
-
-.graph-view__empty {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.graph-view__truncated {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(24, 26, 31, 0.85);
-  color: #ffc46b;
-  font-size: 12px;
-}
-</style>

@@ -23,6 +23,7 @@
     "canvas-confetti": "^1.9.4",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
+    "graphology-types": "^0.24.8",
     "sigma": "^4.0.3",
     "vue": "^3.5.40",
     "vue-router": "~5.1.0"
@@ -51,6 +52,7 @@
     "prettier": "3.9.6",
     "sass": "^1.102.0",
     "typescript": "~6.0.0",
+    "unocss": "^66.11.0",
     "unplugin-icons": "^23.0.1",
     "vite": "^8.2.0",
     "vitest": "^4.1.10",

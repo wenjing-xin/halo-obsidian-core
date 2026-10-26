@@ -90,6 +90,21 @@ export const GraphNode = Node.create({
         default: true,
         parseHTML: (element: HTMLElement) => element.getAttribute('dark') !== 'false',
       },
+      height: {
+        default: 360,
+        parseHTML: (element: HTMLElement) => Number(element.getAttribute('height')) || 360,
+      },
+      width: {
+        default: 100,
+        parseHTML: (element: HTMLElement) => {
+          const value = Number(element.getAttribute('width')) || 100
+          return Math.min(100, Math.max(20, value))
+        },
+      },
+      align: {
+        default: 'center',
+        parseHTML: (element: HTMLElement) => element.getAttribute('align') || 'center',
+      },
     }
   },
 
@@ -97,8 +112,23 @@ export const GraphNode = Node.create({
     return [{ tag: 'obsidian-graph' }]
   },
 
-  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, unknown> }) {
-    return ['obsidian-graph', mergeAttributes(HTMLAttributes)]
+  renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: Record<string, unknown> }) {
+    const attrs = node?.attrs ?? {}
+    const height = Number(attrs.height) || 360
+    const width = Math.min(100, Math.max(20, Number(attrs.width) || 100))
+    const align = attrs.align === 'left' || attrs.align === 'right' ? attrs.align : 'center'
+    const margin =
+      align === 'left'
+        ? 'margin-left: 0; margin-right: auto'
+        : align === 'right'
+          ? 'margin-left: auto; margin-right: 0'
+          : 'margin-left: auto; margin-right: auto'
+    return [
+      'obsidian-graph',
+      mergeAttributes(HTMLAttributes, {
+        style: `display: block; height: ${height}px; width: ${width}%; ${margin}`,
+      }),
+    ]
   },
 
   addNodeView() {

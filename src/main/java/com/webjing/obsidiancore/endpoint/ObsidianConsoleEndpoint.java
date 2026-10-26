@@ -52,6 +52,7 @@ public class ObsidianConsoleEndpoint implements CustomEndpoint {
     public RouterFunction<ServerResponse> endpoint() {
         return RouterFunctions.route()
             .GET("graph", this::graph)
+            .GET("graph/preview", this::graphPreview)
             .GET("backlinks/{name}", this::backlinks)
             .GET("outgoing/{name}", this::outgoing)
             .GET("unresolved", request -> ServerResponse.ok()
@@ -73,6 +74,21 @@ public class ObsidianConsoleEndpoint implements CustomEndpoint {
             request.queryParam("showTaxonomy").map(Boolean::parseBoolean).orElse(true),
             request.queryParam("expandParents").map(Boolean::parseBoolean).orElse(false));
         return ServerResponse.ok().body(graphService.buildConsoleGraph(query), GraphPayload.class);
+    }
+
+    /**
+     * Scoped graph preview (full/local/nodes) for the editor embed. Same semantics as
+     * the public endpoint but authenticated, so it does not require anonymous access.
+     */
+    private Mono<ServerResponse> graphPreview(ServerRequest request) {
+        var query = new GraphService.PublicGraphQuery(
+            request.queryParam("mode").orElse("full"),
+            request.queryParam("post").orElse(null),
+            csvSet(request, "nodes"),
+            request.queryParam("depth").map(Integer::parseInt).orElse(1),
+            request.queryParam("showBroken").map(Boolean::parseBoolean).orElse(false),
+            request.queryParam("showTaxonomy").map(Boolean::parseBoolean).orElse(true));
+        return ServerResponse.ok().body(graphService.buildPublicGraph(query), GraphPayload.class);
     }
 
     private Mono<ServerResponse> backlinks(ServerRequest request) {

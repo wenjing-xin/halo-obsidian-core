@@ -16,6 +16,9 @@
  *   show-taxonomy  include category/tag hubs (default: true, opt-out with show-taxonomy="false")
  *   endpoint       override of the public graph API URL
  *   clickable      open post permalink on click (default: true, opt-out with clickable="false")
+ *   height         container height in px (default: 0 = CSS variable / 420px)
+ *   width          container width in percent, 20-100 (default: 0 = full width)
+ *   align          left | center | right, used when width < 100 (default: center)
  *
  * CSS custom properties:
  *   --obsidian-graph-height  container height (default: 420px)
@@ -63,6 +66,9 @@ export class ObsidianGraphElement extends LitElement {
     },
     endpoint: { type: String },
     clickable: { type: Boolean, converter: boolWithDefault(true), noAccessor: true },
+    height: { type: Number },
+    width: { type: Number },
+    align: { type: String },
   }
 
   declare mode: string
@@ -87,13 +93,19 @@ export class ObsidianGraphElement extends LitElement {
 
   declare clickable: boolean
 
+  declare height: number
+
+  declare width: number
+
+  declare align: string
+
   private renderer: GraphRenderer | null = null
 
   private status: 'loading' | 'ready' | 'forbidden' | 'error' = 'loading'
 
   private errorMessage = ''
 
-  private canvas: HTMLCanvasElement | null = null
+  private container: HTMLElement | null = null
 
   private controller: AbortController | null = null
 
@@ -105,10 +117,12 @@ export class ObsidianGraphElement extends LitElement {
       border-radius: 8px;
       overflow: hidden;
     }
-    canvas {
+    .stage {
+      position: relative;
       display: block;
       width: 100%;
       height: 100%;
+      overflow: hidden;
       touch-action: none;
     }
     .overlay {
@@ -143,6 +157,9 @@ export class ObsidianGraphElement extends LitElement {
     this.showTaxonomy = true
     this.endpoint = DEFAULT_ENDPOINT
     this.clickable = true
+    this.height = 0
+    this.width = 0
+    this.align = ''
   }
 
   connectedCallback(): void {
@@ -164,6 +181,25 @@ export class ObsidianGraphElement extends LitElement {
     ]
     if (reloadKeys.some((key) => changed.has(key))) {
       this.load()
+    }
+    if (['height', 'width', 'align'].some((key) => changed.has(key))) {
+      this.applySizing()
+    }
+  }
+
+  /**
+   * Apply height/width/align attributes to the host element. Inline styles
+   * emitted by the editor's renderHTML take precedence when already present.
+   */
+  private applySizing(): void {
+    if (this.height > 0) {
+      this.style.height = `${this.height}px`
+    }
+    if (this.width >= 20 && this.width < 100) {
+      this.style.width = `${this.width}%`
+      const align = this.align === 'left' || this.align === 'right' ? this.align : 'center'
+      this.style.marginLeft = align === 'left' ? '0' : 'auto'
+      this.style.marginRight = align === 'right' ? '0' : 'auto'
     }
   }
 
@@ -221,11 +257,11 @@ export class ObsidianGraphElement extends LitElement {
   }
 
   private applyPayload(payload: GraphPayload): void {
-    if (!this.canvas) {
+    if (!this.container) {
       return
     }
     if (!this.renderer) {
-      this.renderer = new GraphRenderer(this.canvas, {
+      this.renderer = new GraphRenderer(this.container, {
         dark: this.dark !== false,
         showLabels: this.showLabels === true,
         showArrows: this.showArrows === true,
@@ -250,7 +286,7 @@ export class ObsidianGraphElement extends LitElement {
 
   protected render() {
     return html`
-      <canvas part="canvas"></canvas>
+      <div class="stage" part="canvas"></div>
       ${this.status === 'loading' && !this.renderer
         ? html`<div class="overlay">图谱加载中…</div>`
         : nothing}
@@ -266,9 +302,9 @@ export class ObsidianGraphElement extends LitElement {
   }
 
   protected firstUpdated(): void {
-    this.canvas = this.renderRoot.querySelector('canvas')
+    this.container = this.renderRoot.querySelector('.stage')
     if (this.status === 'ready') {
-      // Payload arrived before the canvas was ready.
+      // Payload arrived before the container was ready.
       this.load()
     }
   }
