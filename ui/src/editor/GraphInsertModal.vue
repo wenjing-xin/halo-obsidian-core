@@ -193,9 +193,12 @@
 
       <FormKit v-model="theme" type="select" label="图谱主题" :options="[
         { label: '跟随文章主题（自动）', value: 'auto' },
-        { label: '明亮', value: 'light' },
-        { label: '暗黑', value: 'dark' },
+        { label: '固定明亮（不跟随主题）', value: 'light' },
+        { label: '固定暗黑（不跟随主题）', value: 'dark' },
       ]" />
+      <p class="graph-modal__meta">
+        自动模式与评论组件一样跟随页面明暗切换；固定模式不会随页面变化。
+      </p>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <FormKit v-model="width" type="number" label="宽度（%）" :min="20" :max="100" :number="true" />

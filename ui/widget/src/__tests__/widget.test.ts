@@ -35,6 +35,8 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = ''
   document.body.className = ''
+  document.documentElement.removeAttribute('data-color-scheme')
+  document.documentElement.removeAttribute('data-theme')
   vi.unstubAllGlobals()
 })
 it('anchors the rendered Sigma viewport and layers to its host frame', () => {
@@ -43,6 +45,29 @@ it('anchors the rendered Sigma viewport and layers to its host frame', () => {
   expect(styles).toContain('inset: 0')
   expect(styles).toContain('.stage > canvas')
   expect(styles).toContain('.stage > .sigma-mouse')
+})
+
+it('adds a non-interactive light frame border that tracks live theme changes', async () => {
+  const el = await mount()
+  await el.updateComplete
+  const frame = el.shadowRoot!.querySelector('.frame')!
+  expect(frame.getAttribute('style')).toContain('--graph-frame-border:#e2e8f0')
+  const styles = ObsidianGraphElement.styles.toString()
+  expect(styles).toContain('.frame::after')
+  expect(styles).toContain(
+    'border: 1px solid var(--obsidian-graph-border, var(--graph-frame-border))',
+  )
+  expect(styles).toContain('pointer-events: none')
+  const requests = fetchMock.mock.calls.length
+  document.body.className = 'dark'
+  await vi.waitFor(() =>
+    expect(frame.getAttribute('style')).toContain('--graph-frame-border:transparent'),
+  )
+  document.body.className = 'light'
+  await vi.waitFor(() =>
+    expect(frame.getAttribute('style')).toContain('--graph-frame-border:#e2e8f0'),
+  )
+  expect(fetchMock).toHaveBeenCalledTimes(requests)
 })
 async function mount(attrs: Record<string, string> = {}) {
   const el = document.createElement('obsidian-graph') as ObsidianGraphElement
@@ -65,6 +90,61 @@ it('loads current-article scope and changes theme without refetching', async () 
   expect(fetchMock).toHaveBeenCalledTimes(count)
   el.remove()
   expect(renderers[0].destroy).toHaveBeenCalledOnce()
+})
+
+it('follows live comment widget attributes and system preferences without graph reloads', async () => {
+  const media = Object.assign(new EventTarget(), { matches: false })
+  vi.stubGlobal('matchMedia', () => media)
+  const el = await mount()
+  const count = fetchMock.mock.calls.length
+  for (const scheme of ['dark', 'light', 'dark', 'light']) {
+    document.documentElement.setAttribute('data-color-scheme', scheme)
+    await vi.waitFor(() =>
+      expect(renderers[0].setOptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dark: scheme === 'dark' }),
+      ),
+    )
+    await el.updateComplete
+    expect(el.shadowRoot?.querySelector('.frame')?.getAttribute('style')).toContain(
+      `--graph-bg:${scheme === 'dark' ? '#1e1e1e' : '#ffffff'}`,
+    )
+  }
+  document.documentElement.setAttribute('data-color-scheme', 'auto')
+  media.matches = true
+  media.dispatchEvent(new Event('change'))
+  await el.updateComplete
+  expect(renderers[0].setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ dark: true }))
+  el.setAttribute('theme', 'light')
+  await el.updateComplete
+  expect(renderers[0].setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ dark: false }))
+  expect(fetchMock).toHaveBeenCalledTimes(count)
+})
+
+it('lets visitors switch a fixed dark embed back to automatic theme following', async () => {
+  const el = await mount({ theme: 'dark' })
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="图谱设置"]')!.click()
+  await el.updateComplete
+  expect(el.shadowRoot?.textContent).toContain('当前图谱固定为暗黑')
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('[aria-label="图谱主题模式"]')!
+  expect(select.value).toBe('dark')
+  const count = fetchMock.mock.calls.length
+  select.value = 'auto'
+  select.dispatchEvent(new Event('change'))
+  await el.updateComplete
+  expect(renderers[0].setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ dark: false }))
+  document.body.className = 'dark'
+  await vi.waitFor(() =>
+    expect(renderers[0].setOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ dark: true }),
+    ),
+  )
+  document.body.className = 'light'
+  await vi.waitFor(() =>
+    expect(renderers[0].setOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ dark: false }),
+    ),
+  )
+  expect(fetchMock).toHaveBeenCalledTimes(count)
 })
 it('never falls back to a global request for missing local context', async () => {
   const el = document.createElement('obsidian-graph') as ObsidianGraphElement

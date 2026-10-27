@@ -36,6 +36,24 @@ describe('graph theme', () => {
     document.body.className = 'color-scheme-auto'
     expect(resolveDark(el, 'auto', false)).toBe(false)
   })
+  it('prioritizes a changed explicit attribute over a stale dark class', () => {
+    const el = host()
+    document.body.className = 'dark'
+    document.body.dataset.colorScheme = 'light'
+    expect(resolveDark(el, 'auto', true)).toBe(false)
+    document.body.dataset.colorScheme = 'dark'
+    expect(resolveDark(el, 'auto', false)).toBe(true)
+    delete document.body.dataset.colorScheme
+  })
+  it('resolves theme ancestors across shadow roots', () => {
+    const wrapper = host()
+    wrapper.dataset.colorScheme = 'dark'
+    const el = document.createElement('span')
+    wrapper.attachShadow({ mode: 'open' }).append(el)
+    expect(resolveDark(el, 'auto', false)).toBe(true)
+    wrapper.dataset.colorScheme = 'light'
+    expect(resolveDark(el, 'auto', true)).toBe(false)
+  })
   it('supports computed color-scheme and CSS variables', () => {
     const el = host()
     el.style.colorScheme = 'dark'

@@ -22,6 +22,8 @@
  *
  * CSS custom properties:
  *   --obsidian-graph-height  container height (default: 420px)
+ *   --obsidian-graph-border  frame border color (light: #e2e8f0; dark: transparent)
+ *   Color overrides and theme integration: docs/theme-integration.md
  */
 import {
   GRAPH_MIN_WIDTH,
@@ -37,6 +39,7 @@ import {
   observeGraphTheme,
   readGraphTheme,
   resolveDark,
+  systemPrefersDark,
 } from '../../src/shared/graph-renderer/theme-controller'
 import type { GraphPayload } from '../../src/shared/graph-renderer/types'
 import { graphAction, graphActionStyles } from './graph-actions'
@@ -132,11 +135,7 @@ export class ObsidianGraphElement extends LitElement {
   private keyword = ''
 
   private displayOptions() {
-    const dark = resolveDark(
-      this,
-      normalizeTheme(this.theme, this.dark),
-      window.matchMedia('(prefers-color-scheme: dark)').matches,
-    )
+    const dark = resolveDark(this, normalizeTheme(this.theme, this.dark), systemPrefersDark())
     return {
       dark,
       theme: readGraphTheme(this, dark),
@@ -212,11 +211,25 @@ export class ObsidianGraphElement extends LitElement {
       overflow: hidden;
       color: var(--graph-text);
       background: var(--graph-bg);
+      border-radius: inherit;
     }
-    input {
+    /* Overlay the frame so canvas coordinates and picking dimensions do not change. */
+    .frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      box-sizing: border-box;
+      border: 1px solid var(--obsidian-graph-border, var(--graph-frame-border));
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    input,
+    select {
       font: inherit;
     }
-    input:focus-visible {
+    input:focus-visible,
+    select:focus-visible {
       outline: 2px solid var(--graph-accent);
       outline-offset: 2px;
     }
@@ -261,6 +274,21 @@ export class ObsidianGraphElement extends LitElement {
       padding: 6px;
       background: transparent;
       color: inherit;
+    }
+    select {
+      min-width: 0;
+      max-width: 140px;
+      padding: 4px 6px;
+      border: 1px solid var(--graph-tool-border);
+      border-radius: 4px;
+      background: var(--graph-bg);
+      color: var(--graph-tool-active);
+      color-scheme: inherit;
+    }
+    .theme-hint {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.6;
     }
     .notice {
       position: absolute;
@@ -445,11 +473,12 @@ export class ObsidianGraphElement extends LitElement {
 
   protected render() {
     const { theme, dark } = this.displayOptions()
+    const themeMode = normalizeTheme(this.theme, this.dark)
     const unavailable = this.status !== 'ready' || !this.payload || !this.renderer
     return html`
       <div
         class="frame"
-        style=${`--graph-bg:${theme.background};--graph-text:${theme.label};--graph-accent:${theme.focusNode};--graph-tool-bg:${dark ? '#171717e6' : '#ffffffe6'};--graph-tool-border:${dark ? '#ffffff1a' : '#0f172a14'};--graph-tool-color:${dark ? '#d1d5db' : '#6b7280'};--graph-tool-active:${dark ? '#f3f4f6' : '#1f2937'};--graph-tool-hover:${dark ? '#ffffff1a' : '#f3f4f6'}`}
+        style=${`color-scheme:${dark ? 'dark' : 'light'};--graph-bg:${theme.background};--graph-text:${theme.label};--graph-accent:${theme.focusNode};--graph-frame-border:${dark ? 'transparent' : '#e2e8f0'};--graph-tool-bg:${dark ? '#171717e6' : '#ffffffe6'};--graph-tool-border:${dark ? '#ffffff1a' : '#0f172a14'};--graph-tool-color:${dark ? '#d1d5db' : '#6b7280'};--graph-tool-active:${dark ? '#f3f4f6' : '#1f2937'};--graph-tool-hover:${dark ? '#ffffff1a' : '#f3f4f6'}`}
         @keydown=${(event: KeyboardEvent) => {
           if (event.key === 'Escape' && this.settingsOpen) {
             this.settingsOpen = false
@@ -486,6 +515,27 @@ export class ObsidianGraphElement extends LitElement {
           this.settingsOpen
             ? html`<section class="settings" aria-label="图谱设置">
                 <h3 class="settings-title">显示设置</h3>
+                <label
+                  >主题模式<select
+                    aria-label="图谱主题模式"
+                    .value=${themeMode}
+                    @change=${(event: Event) => {
+                      this.theme = (event.target as HTMLSelectElement).value
+                      this.dark = null
+                    }}
+                  >
+                    <option value="auto" ?selected=${themeMode === 'auto'}>跟随主题</option>
+                    <option value="light" ?selected=${themeMode === 'light'}>固定明亮</option>
+                    <option value="dark" ?selected=${themeMode === 'dark'}>固定暗黑</option>
+                  </select></label
+                >
+                ${
+                  themeMode !== 'auto'
+                    ? html`<p class="theme-hint">
+                        当前图谱固定为${themeMode === 'dark' ? '暗黑' : '明亮'}，选择“跟随主题”可同步页面配色。本次切换仅影响当前浏览。
+                      </p>`
+                    : nothing
+                }
                 <input
                   type="search"
                   aria-label="搜索节点"

@@ -1,47 +1,70 @@
-/* Shared by the rich-text editor and theme pages; colors remain theme-overridable. */
-obsidian-core-link:not(:defined),
-a.obsidian-post-link,
-a[data-obsidian-post] {
-  --_link-color: var(--obsidian-link-color, #0f766e);
+/* Match the hyperlink editor's inline cards, including script-free published links. */
+:is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]) {
+  --_link-color: var(--obsidian-link-color, var(--halo-hyperlink-card-inline-title-color, #18181b));
+  --_link-bg: var(--obsidian-link-bg, var(--halo-hyperlink-card-inline-bg-color, #f4f4f5));
+  --_link-hover-bg: var(--obsidian-link-hover-bg, var(--halo-hyperlink-card-inline-hover-bg-color, #e4e4e7));
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 8px);
+  margin-inline: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
   color: var(--_link-color);
-  background: var(--obsidian-link-bg, color-mix(in srgb, var(--_link-color) 8%, transparent));
-  border: 1px solid var(--obsidian-link-border, color-mix(in srgb, var(--_link-color) 24%, transparent));
-  border-radius: 5px;
-  padding: 0.08em 0.38em;
-  margin-inline: 0.12em;
-  font-weight: 500;
-  line-height: 1.65;
+  background: var(--_link-bg);
+  font: inherit;
+  font-size: 90%;
+  font-weight: 400;
+  line-height: 1.5;
+  vertical-align: middle;
   text-decoration: none;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
   overflow-wrap: anywhere;
   cursor: pointer;
+  transition: background-color 150ms, color 150ms;
 }
-obsidian-core-link:not(:defined)::before,
-a[data-obsidian-post]::before,
-a.obsidian-post-link::before {
+:is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post])::before {
   content: "";
   display: inline-block;
-  width: 0.9em;
-  height: 0.9em;
-  margin-right: 0.3em;
-  vertical-align: -0.1em;
+  flex: none;
+  width: 16px;
+  height: 16px;
   background: currentColor;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' d='m10 13 4-4m-5 6-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 2 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-obsidian-core-link:not(:defined):hover,
-a[data-obsidian-post]:hover,
-a.obsidian-post-link:hover {
-  background: color-mix(in srgb, var(--_link-color) 16%, transparent);
-  border-color: var(--_link-color);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+:is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]):hover {
+  color: var(--_link-color);
+  background: var(--_link-hover-bg);
+  text-decoration: none;
 }
-obsidian-core-link:not(:defined):focus-visible,
-a[data-obsidian-post]:focus-visible {
+:is(a.obsidian-post-link, a[data-obsidian-post]):focus-visible {
   outline: 2px solid var(--_link-color);
   outline-offset: 3px;
 }
-:is(.dark, .theme-dark, .color-scheme-dark, [data-theme="dark"], [data-color-scheme="dark"]) :is(a[data-obsidian-post], obsidian-core-link) {
-  --_link-color: var(--obsidian-link-color, #5eead4);
+:is(.color-scheme-auto, [data-color-scheme="auto"], [data-theme="auto"]) :is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]) {
+  color-scheme: light dark;
+}
+:is(.dark, .theme-dark, .color-scheme-dark, [data-theme="dark"], [data-color-scheme="dark"]) :is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]) {
+  color-scheme: dark;
+  --_link-color: var(--obsidian-link-color, var(--halo-hyperlink-card-inline-title-color, #f4f4f5));
+  --_link-bg: var(--obsidian-link-bg, var(--halo-hyperlink-card-inline-bg-color, #3f3f46));
+  --_link-hover-bg: var(--obsidian-link-hover-bg, var(--halo-hyperlink-card-inline-hover-bg-color, #52525b));
+}
+@supports (color: light-dark(white, black)) {
+  :is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]) {
+    --_link-color: var(--obsidian-link-color, var(--halo-hyperlink-card-inline-title-color, light-dark(#18181b, #f4f4f5)));
+    --_link-bg: var(--obsidian-link-bg, var(--halo-hyperlink-card-inline-bg-color, light-dark(#f4f4f5, #3f3f46)));
+    --_link-hover-bg: var(--obsidian-link-hover-bg, var(--halo-hyperlink-card-inline-hover-bg-color, light-dark(#e4e4e7, #52525b)));
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :is(.color-scheme-auto, [data-color-scheme="auto"], [data-theme="auto"]) :is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]) {
+    --_link-color: var(--obsidian-link-color, var(--halo-hyperlink-card-inline-title-color, #f4f4f5));
+    --_link-bg: var(--obsidian-link-bg, var(--halo-hyperlink-card-inline-bg-color, #3f3f46));
+    --_link-hover-bg: var(--obsidian-link-hover-bg, var(--halo-hyperlink-card-inline-hover-bg-color, #52525b));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(obsidian-core-link:not(:defined), a.obsidian-post-link, a[data-obsidian-post]) { transition: none; }
 }

@@ -26,8 +26,12 @@ Markdown 编辑器与默认富文本编辑器统一使用 `obsidian-core-link` �
 
 ## 渲染与安全
 
-- 前台内容处理器将标签转换为普通 `<a>`，应用链条图标、浅色背景和边框样式，不依赖图谱脚本或匿名图谱开关；Markdown 预览与主题模板也会由轻量 `<obsidian-core-link>` Web Component 即时渲染。
+- 前台内容处理器将标签转换为普通 `<a>`，应用链条图标、浅色背景和圆角的无描边行内卡片样式，不依赖图谱脚本或匿名图谱开关；Markdown 预览与主题模板也会由轻量 `<obsidian-core-link>` Web Component 即时渲染。
 - 已指定 `post` 但目标无法解析时，显示不可点击的未解析文字，不继续使用过期的 `url`。
 - 代码块、HTML 注释及已有普通超链接中的示例标签不建立关系。
 - 复制时转义属性及文字；前台不透传事件属性，拒绝 `javascript:`、`data:` 等非 HTTP(S) 地址。
 - 当前插件未上线，不迁移旧的 `<a data-obsidian-post>` 标签；测试文章请重新复制新标签。
+
+## 主题样式
+
+可使用 `--obsidian-link-color`、`--obsidian-link-bg` 和 `--obsidian-link-hover-bg` 分别覆盖文字/图标、卡片背景和悬停背景。组件也兼容超链接编辑器的行内卡片颜色变量；完整优先级、明暗适配和示例见 [主题适配说明](./theme-integration.md)。
