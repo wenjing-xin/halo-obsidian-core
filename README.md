@@ -6,6 +6,8 @@
 
 > 需要 Halo **2.27.0 及以上版本**。图谱交互参考 Obsidian 的图谱视图；本项目是独立的 Halo 插件，并非 Obsidian 官方产品。
 
+在线文档：[Halo 知链使用文档](https://auth.webjing.com/docs/halo-obsidian-core/getting-started) · [双链标签](https://auth.webjing.com/docs/halo-obsidian-core/wikilink-tags) · [主题适配](https://auth.webjing.com/docs/halo-obsidian-core/theme-integration)
+
 ## 功能
 
 - **文章双链**：在默认编辑器中插入文章关联，或复制双链标签到 Markdown 正文；点击关联即可跳转到目标文章。
@@ -53,7 +55,7 @@
 
 文章发布后，插件会根据发布版本更新关联索引。若已有文章的关系没有及时显示，可在后台图谱工具栏中重新索引并刷新。
 
-更多属性、安全规则与示例见 [双链标签说明](./docs/wikilink-tags.md)。
+更多属性、安全规则与示例见 [双链标签说明](https://auth.webjing.com/docs/halo-obsidian-core/wikilink-tags)。
 
 ## 插入知识图谱
 
@@ -102,7 +104,7 @@ Markdown 正文或主题模板中也可以使用自定义标签：
 
 关系图谱和关联文章行内卡片支持评论组件同款的明暗模式标记，并提供 CSS 变量供主题覆盖颜色。亮色图谱默认带 1px 浅灰边框，可通过 `--obsidian-graph-border` 调整。
 
-完整变量表、默认配色、明暗模式优先级和可复制的 CSS 示例见 [主题适配说明](./docs/theme-integration.md)。需要跟随页面切换时，请使用 `theme="auto"`；固定 `light` / `dark` 模式不会自动切换。
+完整变量表、默认配色、明暗模式优先级和可复制的 CSS 示例见 [主题适配说明](https://auth.webjing.com/docs/halo-obsidian-core/theme-integration)。需要跟随页面切换时，请使用 `theme="auto"`；固定 `light` / `dark` 模式不会自动切换。
 
 
 ## 开发与构建
