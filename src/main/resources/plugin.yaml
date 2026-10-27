@@ -15,8 +15,8 @@ spec:
   homepage: https://github.com/webjing/obsidian-core#readme
   repo: https://github.com/webjing/obsidian-core
   issues: https://github.com/webjing/obsidian-core/issues
-  displayName: "obsidian-core"
-  description: "obsidian-core - 双链笔记与关系图谱"
+  displayName: "Halo 知链"
+  description: "Halo 双链与知识图谱插件，支持文章关联、反向链接、断链检测与交互式图谱。"
   settingName: obsidian-core-settings
   configMapName: obsidian-core-configmap
   license:

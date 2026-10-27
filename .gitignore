@@ -48,9 +48,6 @@ nbdist/
 ### VSCode
 *.project
 *.factorypath
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
 
 ### Compiled class file
 *.class
@@ -83,6 +80,8 @@ application-local.properties
 /ui/build/
 /workplace/
 /src/main/resources/ui/
+
+### Local editor
 .trae/
 .claude/
 .agents/
