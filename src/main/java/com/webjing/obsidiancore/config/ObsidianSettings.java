@@ -1,12 +1,11 @@
 package com.webjing.obsidiancore.config;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 import lombok.Data;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 
 /**
  * <p>Settings POJO backed by {@code settings.yaml} group {@code obsidian}, cached with
@@ -48,7 +47,7 @@ public class ObsidianSettings {
         this.caseSensitive = json.path("caseSensitive").asBoolean(false);
         this.renderBrokenLinks = json.path("renderBrokenLinks").asBoolean(false);
         this.allowAnonymousGraph = json.path("allowAnonymousGraph").asBoolean(false);
-        this.anonymousGraphDefaultMode = json.path("anonymousGraphDefaultMode").asText("full");
+        this.anonymousGraphDefaultMode = json.path("anonymousGraphDefaultMode").asString("full");
         this.graphDefaultShowTaxonomy = json.path("graphDefaultShowTaxonomy").asBoolean(true);
         this.graphDefaultCollapseCategories =
             json.path("graphDefaultCollapseCategories").asBoolean(false);
@@ -61,8 +60,8 @@ public class ObsidianSettings {
         if (node == null || !node.isArray()) {
             return new HashSet<>();
         }
-        return StreamSupport.stream(node.spliterator(), false)
-            .map(JsonNode::asText)
+        return node.valueStream()
+            .map(JsonNode::asString)
             .filter(text -> text != null && !text.isBlank())
             .collect(Collectors.toCollection(HashSet::new));
     }

@@ -12,8 +12,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.server.RequestPredicates;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -56,7 +56,8 @@ public class ObsidianConsoleEndpoint implements CustomEndpoint {
             .GET("backlinks/{name}", this::backlinks)
             .GET("outgoing/{name}", this::outgoing)
             .GET("unresolved", request -> ServerResponse.ok()
-                .body(backlinkService.unresolved(), (Class) List.class))
+                .body(backlinkService.unresolved(),
+                    new ParameterizedTypeReference<List<UnresolvedItem>>() {}))
             .POST("reindex", request -> ServerResponse.ok()
                 .body(reindexService.reindexAll(), Boolean.class))
             .GET("summary", request -> ServerResponse.ok()

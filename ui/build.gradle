@@ -7,7 +7,7 @@ node {
     pnpmVersion = '10.33.0'
 }
 
-group 'com.webjing.obsidiancore.ui'
+group = 'com.webjing.obsidiancore.ui'
 
 tasks.register('pnpmBuild', PnpmTask) {
     group = 'build'

@@ -1,7 +1,5 @@
 package com.webjing.obsidiancore.service.impl;
 
-import static run.halo.app.extension.index.query.QueryFactory.all;
-
 import com.webjing.obsidiancore.config.ObsidianSettings;
 import com.webjing.obsidiancore.dto.GraphModels.EdgeType;
 import com.webjing.obsidiancore.dto.GraphModels.GraphEdge;
@@ -31,7 +29,6 @@ import run.halo.app.core.extension.content.Tag;
 import run.halo.app.extension.AbstractExtension;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
-import run.halo.app.extension.router.selector.FieldSelector;
 
 /**
  * <p>Default implementation of {@link GraphService}: loads posts/categories/tags/wikilinks
@@ -133,7 +130,7 @@ public class GraphServiceImpl implements GraphService {
     }
 
     private ListOptions options() {
-        return new ListOptions().setFieldSelector(FieldSelector.of(all()));
+        return ListOptions.builder().build();
     }
 
     private Mono<GraphPayload> buildGraph(GraphQuery query, boolean publicOnly, String localRoot,

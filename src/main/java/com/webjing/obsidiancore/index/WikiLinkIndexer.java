@@ -1,6 +1,6 @@
 package com.webjing.obsidiancore.index;
 
-import static run.halo.app.extension.index.query.QueryFactory.equal;
+import static run.halo.app.extension.index.query.Queries.equal;
 
 import com.webjing.obsidiancore.config.ObsidianSettings;
 import com.webjing.obsidiancore.index.WikiLinkParser.Occurrence;
@@ -22,7 +22,6 @@ import run.halo.app.content.PostContentService;
 import run.halo.app.core.extension.content.Post;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
-import run.halo.app.extension.router.selector.FieldSelector;
 
 /**
  * <p>Write-time indexer: builds and maintains one {@link WikiLink} per source post from
@@ -89,8 +88,8 @@ public class WikiLinkIndexer {
             return Mono.empty();
         }
         return client.listAll(WikiLink.class,
-                new ListOptions().setFieldSelector(
-                    FieldSelector.of(equal(WikiLink.UNRESOLVED_TITLES_INDEX, title.strip()))),
+                ListOptions.builder()
+                    .andQuery(equal(WikiLink.UNRESOLVED_TITLES_INDEX, title.strip())).build(),
                 Sort.unsorted())
             .map(link -> link.getSpec().getSourcePostName())
             .distinct()
@@ -107,8 +106,8 @@ public class WikiLinkIndexer {
             return Mono.empty();
         }
         return client.listAll(WikiLink.class,
-                new ListOptions().setFieldSelector(
-                    FieldSelector.of(equal(WikiLink.LINKED_TARGETS_INDEX, postName))),
+                ListOptions.builder()
+                    .andQuery(equal(WikiLink.LINKED_TARGETS_INDEX, postName)).build(),
                 Sort.unsorted())
             .map(link -> link.getSpec().getSourcePostName())
             .distinct()

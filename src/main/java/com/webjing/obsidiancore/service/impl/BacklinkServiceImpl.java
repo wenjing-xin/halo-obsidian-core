@@ -1,7 +1,6 @@
 package com.webjing.obsidiancore.service.impl;
 
-import static run.halo.app.extension.index.query.QueryFactory.all;
-import static run.halo.app.extension.index.query.QueryFactory.equal;
+import static run.halo.app.extension.index.query.Queries.equal;
 
 import com.webjing.obsidiancore.dto.GraphModels.BacklinkItem;
 import com.webjing.obsidiancore.dto.GraphModels.BacklinksResult;
@@ -21,7 +20,6 @@ import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.content.Post;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.ReactiveExtensionClient;
-import run.halo.app.extension.router.selector.FieldSelector;
 
 /**
  * <p>Default implementation of {@link BacklinkService} querying the WikiLink index.</p>
@@ -40,8 +38,8 @@ public class BacklinkServiceImpl implements BacklinkService {
     @Override
     public Mono<BacklinksResult> backlinks(String postName) {
         return client.listAll(WikiLink.class,
-                new ListOptions().setFieldSelector(FieldSelector.of(
-                    equal(WikiLink.LINKED_TARGETS_INDEX, postName))), Sort.unsorted())
+                ListOptions.builder().andQuery(equal(WikiLink.LINKED_TARGETS_INDEX, postName))
+                    .build(), Sort.unsorted())
             .flatMap(link -> client.fetch(Post.class, link.getSpec().getSourcePostName())
                 .map(post -> {
                     String permalink = post.getStatus() == null
@@ -116,6 +114,6 @@ public class BacklinkServiceImpl implements BacklinkService {
     }
 
     private ListOptions options() {
-        return new ListOptions().setFieldSelector(FieldSelector.of(all()));
+        return ListOptions.builder().build();
     }
 }

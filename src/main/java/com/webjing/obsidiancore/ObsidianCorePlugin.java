@@ -59,7 +59,7 @@ public class ObsidianCorePlugin extends BasePlugin implements InitializingBean, 
 
     @Override
     public void afterPropertiesSet() {
-        obsidianSettings.update(settingFetcher.get(ObsidianSettings.SETTING_GROUP));
+        obsidianSettings.update(settingFetcher.getSettingValue(ObsidianSettings.SETTING_GROUP));
     }
 
     @Override
@@ -69,7 +69,7 @@ public class ObsidianCorePlugin extends BasePlugin implements InitializingBean, 
 
     @EventListener
     public void onConfigUpdated(PluginConfigUpdatedEvent event) {
-        obsidianSettings.update(settingFetcher.get(ObsidianSettings.SETTING_GROUP));
+        obsidianSettings.update(settingFetcher.getSettingValue(ObsidianSettings.SETTING_GROUP));
         log.info("obsidian-core settings reloaded");
     }
 
