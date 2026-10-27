@@ -159,6 +159,10 @@ export class ObsidianGraphElement extends LitElement {
       display: block;
       position: relative;
       box-sizing: border-box;
+      /* Never collapse in shrink-to-fit parents (flex/grid items): percentage
+         min-width cannot resolve there and the sigma canvas would fall back
+         to its 300x150 default and get clipped. */
+      width: 100%;
       min-width: min(320px, 100%);
       max-width: 100%;
       min-height: 300px;

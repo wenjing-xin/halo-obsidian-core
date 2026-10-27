@@ -19,6 +19,7 @@ vi.mock('sigma', () => ({
     refresh = vi.fn()
     scheduleRefresh = vi.fn()
     setSettings = vi.fn()
+    resize = vi.fn()
     kill = vi.fn()
   },
 }))

@@ -253,6 +253,9 @@ export class GraphRenderer {
         stagePadding: 30,
         minCameraRatio: 0.08,
         maxCameraRatio: 10,
+        // The host can transiently be 0-sized (theme layout settling); never
+        // throw — the ResizeObserver below restores the real size.
+        allowInvalidContainer: true,
       },
       nodeReducer: (key, data) => this.reduceNode(key, data),
       edgeReducer: (key, data) => this.reduceEdge(key, data),
@@ -285,16 +288,29 @@ export class GraphRenderer {
     this.container.addEventListener('keydown', this.onKeyDown)
 
     // Keep the WebGL canvas in sync when the container is resized
-    // (e.g. the editor embed's drag-to-resize handles).
+    // (e.g. the editor embed's drag-to-resize handles, or a theme layout that
+    // starts 0-sized and settles later). Force the resize: sigma caches its
+    // own dimensions and would otherwise skip transitions it never measured.
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => {
         if (this.destroyed) {
           return
         }
-        this.sigma.resize()
+        this.sigma.resize(true)
         this.sigma.refresh()
       })
       this.resizeObserver.observe(this.container)
+    }
+    // Reconcile once after the current layout pass: the constructor may run
+    // before the container has its final size.
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        if (this.destroyed) {
+          return
+        }
+        this.sigma.resize(true)
+        this.sigma.refresh()
+      })
     }
   }
 
