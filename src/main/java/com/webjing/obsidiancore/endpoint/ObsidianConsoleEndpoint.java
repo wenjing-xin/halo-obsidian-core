@@ -77,8 +77,8 @@ public class ObsidianConsoleEndpoint implements CustomEndpoint {
     }
 
     /**
-     * Scoped graph preview (full/local/nodes) for the editor embed. Same semantics as
-     * the public endpoint but authenticated, so it does not require anonymous access.
+     * Scoped graph preview (full/local/nodes) for the editor embed. Authenticated
+     * previews include draft nodes without changing public graph visibility.
      */
     private Mono<ServerResponse> graphPreview(ServerRequest request) {
         var query = new GraphService.PublicGraphQuery(
@@ -88,7 +88,7 @@ public class ObsidianConsoleEndpoint implements CustomEndpoint {
             request.queryParam("depth").map(Integer::parseInt).orElse(1),
             request.queryParam("showBroken").map(Boolean::parseBoolean).orElse(false),
             request.queryParam("showTaxonomy").map(Boolean::parseBoolean).orElse(true));
-        return ServerResponse.ok().body(graphService.buildPublicGraph(query), GraphPayload.class);
+        return ServerResponse.ok().body(graphService.buildConsoleGraphPreview(query), GraphPayload.class);
     }
 
     private Mono<ServerResponse> backlinks(ServerRequest request) {

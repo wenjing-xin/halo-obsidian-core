@@ -35,6 +35,11 @@ public interface GraphService {
     Mono<GraphPayload> buildConsoleGraph(GraphQuery query);
 
     /**
+     * Build a scoped graph preview for the authenticated editor, including drafts.
+     */
+    Mono<GraphPayload> buildConsoleGraphPreview(PublicGraphQuery query);
+
+    /**
      * Build the graph for anonymous theme-side rendering with full/local/nodes modes.
      */
     Mono<GraphPayload> buildPublicGraph(PublicGraphQuery query);

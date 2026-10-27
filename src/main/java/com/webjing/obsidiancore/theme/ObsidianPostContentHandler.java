@@ -2,7 +2,6 @@ package com.webjing.obsidiancore.theme;
 
 import com.webjing.obsidiancore.config.ObsidianSettings;
 import com.webjing.obsidiancore.index.PostLinkIndexCache;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -37,7 +36,7 @@ public class ObsidianPostContentHandler implements ReactivePostContentHandler {
             context.setContent(content);
         }
         boolean hasWikilinks = settings.isRenderWikilinks() && content.contains("[[");
-        boolean hasAnchors = content.toLowerCase(Locale.ROOT).contains("<obsidian-core-link");
+        boolean hasAnchors = StructuredLinkHtmlProcessor.containsTag(content);
         if (!hasWikilinks && !hasAnchors) {
             return Mono.just(context);
         }

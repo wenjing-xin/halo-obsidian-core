@@ -15,7 +15,7 @@ vi.mock('../../../src/shared/graph-renderer/renderer', () => ({
   },
 }))
 import '../index'
-import type { ObsidianGraphElement } from '../index'
+import { ObsidianGraphElement } from '../index'
 const payload = {
   nodes: [{ id: 'a' }],
   edges: [],
@@ -36,6 +36,13 @@ afterEach(() => {
   document.body.innerHTML = ''
   document.body.className = ''
   vi.unstubAllGlobals()
+})
+it('anchors the rendered Sigma viewport and layers to its host frame', () => {
+  const styles = ObsidianGraphElement.styles.toString()
+  expect(styles).toContain('position: absolute')
+  expect(styles).toContain('inset: 0')
+  expect(styles).toContain('.stage > canvas')
+  expect(styles).toContain('.stage > .sigma-mouse')
 })
 async function mount(attrs: Record<string, string> = {}) {
   const el = document.createElement('obsidian-graph') as ObsidianGraphElement
@@ -101,4 +108,97 @@ it('restores safe published embed dimensions and updates them without reloading'
   expect(el.style.width).toBe('80%')
   expect(el.style.marginRight).toBe('0px')
   expect(fetchMock).toHaveBeenCalledTimes(calls)
+})
+
+it('uses uniform SVG toolbar icons with tooltips and collapsed settings', async () => {
+  const el = await mount()
+  await el.updateComplete
+  const buttons = [...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('.controls button')]
+  expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+    '刷新图谱',
+    '图谱设置',
+    '播放关系图谱生成动画',
+    '放大',
+    '缩小',
+    '重置视图',
+  ])
+  for (const button of buttons) {
+    expect(button.type).toBe('button')
+    expect(button.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 24 24')
+    expect(button.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+    expect(button.textContent?.trim()).toBe('')
+    expect(button.parentElement?.querySelector('[role="tooltip"]')?.textContent).toBe(
+      button.getAttribute('aria-label'),
+    )
+  }
+  expect(el.shadowRoot?.querySelector('.settings')).toBeNull()
+  expect(ObsidianGraphElement.styles.toString()).toContain('width: 36px')
+  expect(ObsidianGraphElement.styles.toString()).toContain('width: 20px')
+
+  buttons[2]!.click()
+  buttons[3]!.click()
+  buttons[4]!.click()
+  buttons[5]!.click()
+  expect(renderers[0].replay).toHaveBeenCalledOnce()
+  expect(renderers[0].zoomBy.mock.calls).toEqual([[1.25], [0.8]])
+  expect(renderers[0].resetViewport).toHaveBeenCalledOnce()
+})
+
+it('shows compact settings on demand and closes them with Escape', async () => {
+  const el = await mount()
+  await el.updateComplete
+  const settings = el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="图谱设置"]')!
+  settings.click()
+  await el.updateComplete
+  expect(settings.getAttribute('aria-expanded')).toBe('true')
+  expect(el.shadowRoot?.querySelector('.settings h3')?.textContent).toBe('显示设置')
+  expect(el.shadowRoot?.querySelectorAll('.settings button')).toHaveLength(0)
+
+  const checkbox = el.shadowRoot!.querySelector<HTMLInputElement>(
+    '.settings input[type="checkbox"]',
+  )!
+  checkbox.checked = false
+  checkbox.dispatchEvent(new Event('change'))
+  await el.updateComplete
+  expect(renderers[0].setOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({ showLabels: false }),
+  )
+  checkbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await el.updateComplete
+  expect(el.shadowRoot?.querySelector('.settings')).toBeNull()
+  expect(settings.getAttribute('aria-expanded')).toBe('false')
+  expect(el.shadowRoot?.activeElement).toBe(settings)
+})
+
+it('refreshes public graph data without exposing an indexing action', async () => {
+  const el = await mount()
+  await el.updateComplete
+  const count = fetchMock.mock.calls.length
+  const refresh = el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="刷新图谱"]')!
+  refresh.click()
+  await el.updateComplete
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(count + 1))
+  expect(fetchMock.mock.calls.at(-1)?.[1]).toMatchObject({ credentials: 'omit' })
+  expect(fetchMock.mock.calls.at(-1)?.[0]).toContain(
+    '/apis/api.obsidian-core.halo.run/v1alpha1/graph',
+  )
+  expect(el.shadowRoot?.textContent).not.toContain('重新索引')
+})
+
+it('adapts toolbar colors in dark mode and permits retry after failure', async () => {
+  const el = await mount({ theme: 'dark' })
+  await el.updateComplete
+  expect(el.shadowRoot?.querySelector('.frame')?.getAttribute('style')).toContain(
+    '--graph-tool-color:#d1d5db',
+  )
+  fetchMock.mockResolvedValueOnce({ status: 403, ok: false })
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="刷新图谱"]')!.click()
+  await vi.waitFor(() => expect(el.shadowRoot?.textContent).toContain('开放主题端图谱'))
+  expect(el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="放大"]')!.disabled).toBe(
+    true,
+  )
+  const refresh = el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-label="刷新图谱"]')!
+  expect(refresh.disabled).toBe(false)
+  refresh.click()
+  await vi.waitFor(() => expect(renderers.length).toBe(2))
 })

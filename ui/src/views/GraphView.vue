@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { IconRefreshLine, VAlert, VEmpty, VLoading, VModal, VSwitch } from '@halo-dev/components'
-  import WandMagicSparklesIcon from '~icons/fa7-solid/wand-magic-sparkles?width=1em&height=1em';
+  import WandMagicSparklesIcon from '~icons/ri/magic-line'
   import IconSettingsLine from '~icons/ri/settings-3-line'
   import IconFullscreenLine from '~icons/ri/fullscreen-line'
   import IconCloseLine from '~icons/ri/close-line'
@@ -95,6 +95,7 @@
   )
 
   const summary = ref<Awaited<ReturnType<typeof fetchSummary>>['data'] | null>(null)
+  let graphLoadRevision = 0
 
   // ---------------------------------------------------------------------------
   // UnoCSS class groups (light/dark aware)
@@ -144,6 +145,7 @@
   // ---------------------------------------------------------------------------
 
   async function load() {
+    const revision = ++graphLoadRevision
     loading.value = true
     error.value = ''
     try {
@@ -155,27 +157,47 @@
         showTaxonomy: filters.showTaxonomy,
         expandParents: filters.expandParents,
       })
-      payload.value = data
+      if (revision === graphLoadRevision) payload.value = data
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '图谱加载失败'
+      if (revision === graphLoadRevision) {
+        error.value = e instanceof Error ? e.message : '图谱加载失败'
+      }
     } finally {
-      loading.value = false
+      if (revision === graphLoadRevision) loading.value = false
     }
   }
 
   let filterTimer: ReturnType<typeof setTimeout> | null = null
 
   watch(
-    filters,
-    () => {
-      if (filterTimer) {
-        clearTimeout(filterTimer)
-      }
-      filterTimer = setTimeout(() => {
+    () => ({
+      keyword: filters.keyword,
+      categories: filters.selectedCategories.join('\u0000'),
+      tags: filters.selectedTags.join('\u0000'),
+      showBroken: filters.showBroken,
+      showTaxonomy: filters.showTaxonomy,
+      expandParents: filters.expandParents,
+    }),
+    (next, previous) => {
+      const keywordOnly =
+        next.keyword !== previous.keyword &&
+        next.categories === previous.categories &&
+        next.tags === previous.tags &&
+        next.showBroken === previous.showBroken &&
+        next.showTaxonomy === previous.showTaxonomy &&
+        next.expandParents === previous.expandParents
+
+      if (filterTimer) clearTimeout(filterTimer)
+      if (keywordOnly) {
+        filterTimer = setTimeout(() => {
+          filterTimer = null
+          load()
+        }, 220)
+      } else {
+        filterTimer = null
         load()
-      }, 300)
+      }
     },
-    { deep: true },
   )
 
   async function loadFilterOptions() {

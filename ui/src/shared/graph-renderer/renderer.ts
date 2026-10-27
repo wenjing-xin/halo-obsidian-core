@@ -59,8 +59,9 @@ export type RendererOptionsInput = Partial<Omit<RendererOptions, 'forces'>> & {
   forces?: Partial<RendererForces>
 }
 
-const SETTLE_MS = 8000
-const RESETTLE_MS = 3500
+const SETTLE_MS = 5500
+const RESETTLE_MS = 1800
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
 /**
  * World-unit link distance the node radius curve was designed for. FA2's
@@ -91,6 +92,12 @@ type GraphT = Graph<NodeAttrs, EdgeAttrs>
 function nodeRadius(node: GraphNode): number {
   if (node.broken) return 2.2
   return 2.6 + Math.min(5, Math.sqrt(Math.max(0, node.degree)) * 0.85)
+}
+
+function initialPosition(index: number, count: number): { x: number; y: number } {
+  const radius = Math.max(45, Math.sqrt(count) * 9) * Math.sqrt((index + 0.5) / count)
+  const angle = index * GOLDEN_ANGLE
+  return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }
 }
 
 function hexToRgb(color: string): { r: number; g: number; b: number } | null {
@@ -140,6 +147,14 @@ export class GraphRenderer {
 
   private settleTimer: ReturnType<typeof setTimeout> | null = null
 
+  private growthTimer: ReturnType<typeof setTimeout> | null = null
+
+  private growthQueue: string[] = []
+
+  private gentleLayout = false
+
+  private draggedNodes = new Set<string>()
+
   private frameHandle: number | null = null
 
   private destroyed = false
@@ -160,6 +175,10 @@ export class GraphRenderer {
 
   private nodeScaleTarget = new Map<string, number>()
 
+  private nodeGrowth = new Map<string, number>()
+
+  private nodeGrowthTarget = new Map<string, number>()
+
   private edgeDim = new Map<string, number>()
 
   private edgeDimTarget = new Map<string, number>()
@@ -167,6 +186,10 @@ export class GraphRenderer {
   private edgeActive = new Map<string, number>()
 
   private edgeActiveTarget = new Map<string, number>()
+
+  private edgeGrowth = new Map<string, number>()
+
+  private edgeGrowthTarget = new Map<string, number>()
 
   /** Node size factor derived from the current average link distance. */
   private autoScale = 1
@@ -261,6 +284,18 @@ export class GraphRenderer {
       edgeReducer: (key, data) => this.reduceEdge(key, data),
     })
 
+    // Sigma leaves absolute layers at their CSS static position. In centered
+    // article content an inline canvas starts halfway across the stage and is
+    // clipped by its parent. Anchor both drawing and picking to the same origin.
+    for (const layer of this.container.querySelectorAll<HTMLElement>(
+      ':scope > canvas, :scope > .sigma-mouse',
+    )) {
+      layer.style.left = '0'
+      layer.style.top = '0'
+      layer.style.margin = '0'
+      layer.style.display = 'block'
+    }
+
     this.sigma.on('enterNode', ({ node }) => this.setFocus(node))
     this.sigma.on('leaveNode', () => this.setFocus(null))
     this.sigma.on('clickNode', ({ node }) => {
@@ -273,10 +308,27 @@ export class GraphRenderer {
       this.opts.onSelect(null)
       this.setFocus(null)
     })
-    this.sigma.on('nodeDragStart', () => {
+    this.sigma.on('nodeDragStart', ({ allDraggedNodes }) => {
+      if (this.settleTimer) {
+        clearTimeout(this.settleTimer)
+        this.settleTimer = null
+      }
+      for (const node of allDraggedNodes) {
+        if (this.graph.hasNode(node)) this.graph.setNodeAttribute(node, 'fixed', true)
+      }
       this.layout?.stop()
     })
-    this.sigma.on('nodeDragEnd', () => {
+    this.sigma.on('nodeDragEnd', ({ allDraggedNodes }) => {
+      for (const node of allDraggedNodes) {
+        if (this.graph.hasNode(node)) {
+          this.graph.setNodeAttribute(node, 'fixed', true)
+          this.draggedNodes.add(node)
+        }
+      }
+      this.gentleLayout = false
+      if (this.layout) {
+        ;(this.layout as unknown as { settings: ForceAtlas2Settings }).settings = this.fa2Settings()
+      }
       if (this.layout && !this.layout.isRunning()) {
         this.layout.start()
         this.scheduleSettle(RESETTLE_MS)
@@ -318,6 +370,9 @@ export class GraphRenderer {
     if (this.destroyed) {
       return
     }
+    if (this.settleTimer) clearTimeout(this.settleTimer)
+    this.settleTimer = null
+    this.layout?.stop()
     this.opts = {
       ...this.opts,
       ...partialOpts,
@@ -343,6 +398,11 @@ export class GraphRenderer {
       : edges.filter((edge) => edge.type === 'wikilink')
 
     const nodeIds = new Set(nodes.map((node) => node.id))
+    const initialPositions = new Map(
+      [...nodes]
+        .sort((left, right) => right.degree - left.degree || left.id.localeCompare(right.id))
+        .map((node, index) => [node.id, initialPosition(index, nodes.length)]),
+    )
     const seenPairs = new Set<string>()
     const edgesById = new Map<string, GraphEdge>()
     for (const edge of visibleEdges) {
@@ -366,6 +426,7 @@ export class GraphRenderer {
     })
     for (const key of toDrop) {
       this.graph.dropNode(key)
+      this.draggedNodes.delete(key)
     }
     for (const edgeKey of [...this.graph.edges()]) {
       if (!edgesById.has(edgeKey)) {
@@ -373,7 +434,8 @@ export class GraphRenderer {
       }
     }
 
-    for (const node of nodes) {
+    const addedNodes: string[] = []
+    for (const [index, node] of nodes.entries()) {
       const attrs = {
         label: node.title,
         baseColor: node.color || '',
@@ -385,13 +447,14 @@ export class GraphRenderer {
       if (this.graph.hasNode(node.id)) {
         this.graph.mergeNodeAttributes(node.id, attrs)
       } else {
-        const angle = Math.random() * Math.PI * 2
-        const radius = Math.sqrt(Math.random()) * 30
+        const point = initialPositions.get(node.id) ?? initialPosition(index, nodes.length)
         this.graph.addNode(node.id, {
           ...attrs,
-          x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius,
+          ...point,
         })
+        this.nodeGrowth.set(node.id, 0)
+        this.nodeGrowthTarget.set(node.id, 0)
+        addedNodes.push(node.id)
       }
     }
     for (const [id, edge] of edgesById) {
@@ -401,6 +464,8 @@ export class GraphRenderer {
       }
       if (!this.graph.hasEdge(id)) {
         this.graph.addEdgeWithKey(id, edge.source, edge.target, attrs)
+        this.edgeGrowth.set(id, 0)
+        this.edgeGrowthTarget.set(id, 0)
       } else {
         this.graph.mergeEdgeAttributes(id, attrs)
       }
@@ -408,15 +473,32 @@ export class GraphRenderer {
 
     if (this.selectedKey && !nodeIds.has(this.selectedKey)) this.selectedKey = null
     if (this.hoverKey && !nodeIds.has(this.hoverKey)) this.hoverKey = null
-    for (const map of [this.nodeDim, this.nodeDimTarget, this.nodeScale, this.nodeScaleTarget]) {
+    for (const map of [
+      this.nodeDim,
+      this.nodeDimTarget,
+      this.nodeScale,
+      this.nodeScaleTarget,
+      this.nodeGrowth,
+      this.nodeGrowthTarget,
+    ]) {
       for (const key of map.keys()) if (!nodeIds.has(key)) map.delete(key)
     }
-    for (const map of [this.edgeDim, this.edgeDimTarget, this.edgeActive, this.edgeActiveTarget]) {
+    for (const map of [
+      this.edgeDim,
+      this.edgeDimTarget,
+      this.edgeActive,
+      this.edgeActiveTarget,
+      this.edgeGrowth,
+      this.edgeGrowthTarget,
+    ]) {
       for (const key of map.keys()) if (!edgesById.has(key)) map.delete(key)
     }
+    this.growthQueue = this.growthQueue.filter((key) => nodeIds.has(key))
     this.setFocus(this.hoverKey)
+    this.revealEligibleEdges()
+    this.enqueueGrowth(addedNodes)
     this.updateAutoScale()
-    this.restartLayout(this.graph.order > 0 ? SETTLE_MS : 0)
+    this.restartLayout(this.graph.order > 0 ? SETTLE_MS : 0, true)
   }
 
   /**
@@ -424,6 +506,12 @@ export class GraphRenderer {
    * rebuilding the graph; live force updates keep the layout organic.
    */
   setOptions(partialOpts: RendererOptionsInput = {}): void {
+    const forceKeys: (keyof RendererForces)[] = ['center', 'repel', 'link', 'distance']
+    const forcesChanged = forceKeys.some(
+      (key) =>
+        partialOpts.forces?.[key] !== undefined &&
+        partialOpts.forces[key] !== this.opts.forces[key],
+    )
     const distanceChanged =
       partialOpts.forces?.distance !== undefined &&
       partialOpts.forces.distance !== this.opts.forces.distance
@@ -436,10 +524,10 @@ export class GraphRenderer {
     this.container.style.background = this.theme.background
     // Keep the label pass active so hovered titles remain visible when labels are off.
     this.sigma.setSettings({ renderLabels: true })
-    if (partialOpts.forces) {
+    if (forcesChanged) {
       this.applyForces(distanceChanged)
     }
-    this.sigma.scheduleRefresh()
+    this.sigma.refresh()
   }
 
   setHighlight(keyword: string): void {
@@ -461,20 +549,38 @@ export class GraphRenderer {
     void this.sigma.getCamera().reset({ duration: 300 })
   }
 
-  /** Replay Obsidian's slow graph growth animation from the center. */
+  /** Replay the disk layout with a staggered node reveal. */
   replay(): void {
     if (this.destroyed || this.graph.order === 0) {
       return
     }
-    this.graph.updateEachNodeAttributes((_key, attrs) => {
-      const angle = Math.random() * Math.PI * 2
-      const radius = Math.sqrt(Math.random()) * 30
-      attrs.x = Math.cos(angle) * radius
-      attrs.y = Math.sin(angle) * radius
+    const nodes = this.graph
+      .nodes()
+      .sort(
+        (left, right) =>
+          this.graph.degree(right) - this.graph.degree(left) || left.localeCompare(right),
+      )
+    const nodeIndexes = new Map(nodes.map((key, index) => [key, index]))
+    this.graph.updateEachNodeAttributes((key, attrs) => {
+      const point = initialPosition(nodeIndexes.get(key) ?? 0, nodes.length)
+      attrs.x = point.x
+      attrs.y = point.y
       return attrs
     })
+    this.clearGrowthTimer()
+    this.growthQueue = []
+    for (const key of nodes) {
+      this.nodeGrowth.set(key, 0)
+      this.nodeGrowthTarget.set(key, 0)
+      this.growthQueue.push(key)
+    }
+    this.graph.forEachEdge((key) => {
+      this.edgeGrowth.set(key, 0)
+      this.edgeGrowthTarget.set(key, 0)
+    })
+    this.revealNextNode()
     void this.sigma.getCamera().reset({ duration: 300 })
-    this.restartLayout(SETTLE_MS)
+    this.restartLayout(SETTLE_MS, true)
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {
@@ -502,6 +608,7 @@ export class GraphRenderer {
       clearTimeout(this.settleTimer)
       this.settleTimer = null
     }
+    this.clearGrowthTimer()
     if (this.frameHandle !== null) {
       cancelAnimationFrame(this.frameHandle)
       this.frameHandle = null
@@ -517,7 +624,7 @@ export class GraphRenderer {
   // ForceAtlas2 layout
   // ---------------------------------------------------------------------------
 
-  private fa2Settings() {
+  private fa2Settings(gentle = false) {
     const f = this.opts.forces
     return {
       adjustSizes: false,
@@ -528,7 +635,9 @@ export class GraphRenderer {
       linLogMode: false,
       outboundAttractionDistribution: false,
       scalingRatio: f.repel,
-      slowDown: 2.5,
+      // The initial coordinates already form a stable disk; a slower intro
+      // lets links settle without the first-frame burst of random motion.
+      slowDown: gentle ? 8 : 5,
       strongGravityMode: false,
     }
   }
@@ -537,16 +646,17 @@ export class GraphRenderer {
     return 55 / Math.max(this.opts.forces.distance, 10)
   }
 
-  private restartLayout(settleMs: number): void {
+  private restartLayout(settleMs: number, gentle = false): void {
     if (this.settleTimer) clearTimeout(this.settleTimer)
     this.settleTimer = null
     this.layout?.kill()
     this.layout = null
+    this.gentleLayout = gentle
     if (this.graph.order === 0 || this.destroyed) {
       return
     }
     this.layout = new FA2LayoutSupervisor<NodeAttrs, EdgeAttrs>(this.graph, {
-      settings: this.fa2Settings(),
+      settings: this.fa2Settings(gentle),
       getEdgeWeight: (_edge, attrs) =>
         ((attrs as EdgeAttrs | undefined)?.weight ?? 1) * this.weightMultiplier(),
     })
@@ -557,18 +667,25 @@ export class GraphRenderer {
   }
 
   private applyForces(distanceChanged: boolean): void {
+    if (!this.layout && this.graph.order > 0) {
+      this.restartLayout(RESETTLE_MS, this.gentleLayout)
+      return
+    }
     if (!this.layout) {
       return
     }
     if (distanceChanged) {
       // Edge weights are baked into the worker matrices at spawn time, so a
       // distance change requires a respawn; positions carry over seamlessly.
-      this.restartLayout(RESETTLE_MS)
+      this.restartLayout(RESETTLE_MS, this.gentleLayout)
       return
     }
     // gravity / scalingRatio / edgeWeightInfluence are sent to the worker on
     // every iteration, so mutating settings updates the simulation live.
-    ;(this.layout as unknown as { settings: ForceAtlas2Settings }).settings = this.fa2Settings()
+    ;(this.layout as unknown as { settings: ForceAtlas2Settings }).settings = this.fa2Settings(
+      this.gentleLayout,
+    )
+    this.sigma.refresh()
     if (this.layout.isRunning()) {
       this.scheduleSettle(RESETTLE_MS)
     } else {
@@ -584,8 +701,68 @@ export class GraphRenderer {
     this.settleTimer = setTimeout(() => {
       this.layout?.stop()
       this.settleTimer = null
+      this.gentleLayout = false
+      for (const node of this.draggedNodes) {
+        if (this.graph.hasNode(node)) this.graph.setNodeAttribute(node, 'fixed', false)
+      }
+      this.draggedNodes.clear()
       this.updateAutoScale()
     }, ms)
+  }
+
+  private enqueueGrowth(nodes: string[]): void {
+    if (nodes.length === 0) return
+    this.growthQueue.push(
+      ...nodes
+        .filter((key) => !this.growthQueue.includes(key))
+        .sort(
+          (left, right) =>
+            this.graph.degree(right) - this.graph.degree(left) || left.localeCompare(right),
+        ),
+    )
+    if (!this.growthTimer) this.revealNextNode()
+  }
+
+  private revealNextNode(): void {
+    const key = this.growthQueue.shift()
+    if (!key || !this.graph.hasNode(key)) {
+      if (this.growthQueue.length > 0) this.revealNextNode()
+      return
+    }
+    this.nodeGrowthTarget.set(key, 1)
+    for (const edge of this.graph.edges(key)) {
+      const [source, target] = this.graph.extremities(edge)
+      const other = source === key ? target : source
+      if ((this.nodeGrowthTarget.get(other) ?? 0) === 1) {
+        this.edgeGrowthTarget.set(edge, 1)
+      }
+    }
+    this.scheduleFrame()
+    if (this.growthQueue.length > 0) {
+      const step = Math.max(8, Math.min(60, 2400 / this.graph.order))
+      this.growthTimer = setTimeout(() => {
+        this.growthTimer = null
+        this.revealNextNode()
+      }, step)
+    }
+  }
+
+  private revealEligibleEdges(): void {
+    this.graph.forEachEdge((key, _attrs, source, target) => {
+      if (
+        (this.nodeGrowthTarget.get(source) ?? 0) === 1 &&
+        (this.nodeGrowthTarget.get(target) ?? 0) === 1
+      ) {
+        this.edgeGrowthTarget.set(key, 1)
+      }
+    })
+  }
+
+  private clearGrowthTimer(): void {
+    if (this.growthTimer) {
+      clearTimeout(this.growthTimer)
+      this.growthTimer = null
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -629,8 +806,10 @@ export class GraphRenderer {
     let animating = false
     animating = this.tween(this.nodeDim, this.nodeDimTarget, 0.16) || animating
     animating = this.tween(this.nodeScale, this.nodeScaleTarget, 0.16) || animating
+    animating = this.tween(this.nodeGrowth, this.nodeGrowthTarget, 0.2) || animating
     animating = this.tween(this.edgeDim, this.edgeDimTarget, 0.16) || animating
     animating = this.tween(this.edgeActive, this.edgeActiveTarget, 0.16) || animating
+    animating = this.tween(this.edgeGrowth, this.edgeGrowthTarget, 0.22) || animating
     this.sigma.refresh()
     if (animating) {
       this.scheduleFrame()
@@ -692,9 +871,10 @@ export class GraphRenderer {
     const focus = this.focusKey()
     const dim = this.nodeDim.get(key) ?? 0
     const scale = this.nodeScale.get(key) ?? 1
+    const growth = this.nodeGrowth.get(key) ?? 0
     const out: Partial<NodeDisplayData> = {}
 
-    out.size = attrs.baseSize * this.opts.nodeSize * scale * this.autoScale
+    out.size = attrs.baseSize * this.opts.nodeSize * scale * this.autoScale * growth
 
     let color = attrs.broken
       ? theme.brokenColor
@@ -710,8 +890,8 @@ export class GraphRenderer {
       out.color = color
     }
 
-    const opacity = 1 - dim * (1 - theme.dimmedOpacity)
-    if (Math.abs(opacity - data.opacity) > 0.001) {
+    const opacity = (1 - dim * (1 - theme.dimmedOpacity)) * growth
+    if (data.opacity === undefined || Math.abs(opacity - data.opacity) > 0.001) {
       out.opacity = opacity
     }
 
@@ -724,13 +904,15 @@ export class GraphRenderer {
     out.labelBackgroundColor = 'transparent'
     out.labelBackgroundPadding = 0
     out.labelVisibility =
-      key === focus || key === this.selectedKey
-        ? 'visible'
-        : !this.opts.showLabels
-          ? 'hidden'
-          : related
-            ? 'visible'
-            : 'auto'
+      growth < 0.98
+        ? 'hidden'
+        : key === focus || key === this.selectedKey
+          ? 'visible'
+          : !this.opts.showLabels
+            ? 'hidden'
+            : related
+              ? 'visible'
+              : 'auto'
 
     return out
   }
@@ -741,11 +923,12 @@ export class GraphRenderer {
     const isTaxonomy = attrs.edgeType === 'taxonomy'
     const dim = this.edgeDim.get(key) ?? 0
     const active = this.edgeActive.get(key) ?? 0
+    const growth = this.edgeGrowth.get(key) ?? 0
     const out: Partial<EdgeDisplayData> = {}
 
     const baseOpacity = isTaxonomy ? theme.edgeTaxonomyOpacity : theme.edgeOpacity
-    const opacity = baseOpacity * (1 - dim * (1 - theme.dimmedOpacity)) + active * 0.35
-    if (Math.abs(opacity - data.opacity) > 0.001) {
+    const opacity = (baseOpacity * (1 - dim * (1 - theme.dimmedOpacity)) + active * 0.35) * growth
+    if (data.opacity === undefined || Math.abs(opacity - data.opacity) > 0.001) {
       out.opacity = Math.min(1, opacity)
     }
 
@@ -755,7 +938,11 @@ export class GraphRenderer {
     }
 
     const size =
-      (isTaxonomy ? 0.5 : 0.8) * this.opts.lineThickness * (1 + active * 0.15) * this.autoScale
+      (isTaxonomy ? 0.5 : 0.8) *
+      this.opts.lineThickness *
+      (1 + active * 0.15) *
+      this.autoScale *
+      growth
     if (Math.abs(size - data.size) > 0.001) {
       out.size = size
     }

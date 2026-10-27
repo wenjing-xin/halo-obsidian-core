@@ -39,6 +39,7 @@ import {
   resolveDark,
 } from '../../src/shared/graph-renderer/theme-controller'
 import type { GraphPayload } from '../../src/shared/graph-renderer/types'
+import { graphAction, graphActionStyles } from './graph-actions'
 
 const DEFAULT_ENDPOINT = '/apis/api.obsidian-core.halo.run/v1alpha1/graph'
 
@@ -171,12 +172,20 @@ export class ObsidianGraphElement extends LitElement {
       overflow: hidden;
     }
     .stage {
-      position: relative;
+      position: absolute;
+      inset: 0;
       display: block;
-      width: 100%;
-      height: 100%;
+      width: auto;
+      height: auto;
       overflow: hidden;
       touch-action: none;
+    }
+    /* Keep Sigma's absolutely positioned render layers anchored to the full
+       stage; inherited theme positioning rules must not shift the viewport. */
+    .stage > canvas,
+    .stage > .sigma-mouse {
+      left: 0;
+      top: 0;
     }
     .overlay {
       position: absolute;
@@ -197,45 +206,31 @@ export class ObsidianGraphElement extends LitElement {
       padding: 16px;
     }
     .frame {
+      width: 100%;
       height: 100%;
       position: relative;
+      overflow: hidden;
       color: var(--graph-text);
       background: var(--graph-bg);
     }
-    .controls {
-      position: absolute;
-      right: 10px;
-      top: 10px;
-      display: flex;
-      gap: 4px;
-    }
-    button,
     input {
       font: inherit;
     }
-    button {
-      cursor: pointer;
-      border: 1px solid var(--obsidian-graph-border, #8884);
-      border-radius: 5px;
-      background: var(--graph-bg);
-      color: var(--graph-text);
-      padding: 5px 9px;
-    }
-    button:hover {
-      color: var(--graph-accent);
-    }
-    button:focus-visible,
     input:focus-visible {
       outline: 2px solid var(--graph-accent);
       outline-offset: 2px;
     }
     .settings {
       position: absolute;
-      right: 10px;
-      top: 48px;
-      width: min(220px, calc(100% - 40px));
+      z-index: 2;
+      box-sizing: border-box;
+      right: 68px;
+      top: 12px;
+      width: min(220px, calc(100% - 80px));
+      max-height: calc(100% - 24px);
+      overflow-y: auto;
       padding: 12px;
-      border: 1px solid #8884;
+      border: 1px solid var(--graph-tool-border);
       border-radius: 8px;
       background: var(--graph-bg);
       box-shadow: 0 5px 20px #0002;
@@ -243,10 +238,21 @@ export class ObsidianGraphElement extends LitElement {
       display: grid;
       gap: 10px;
     }
+    .settings-title {
+      margin: 0;
+      color: var(--graph-tool-active);
+      font-size: 12px;
+      font-weight: 600;
+    }
     label {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
+    }
+    input[type='checkbox'] {
+      margin: 0;
+      accent-color: var(--graph-accent);
     }
     input[type='search'] {
       min-width: 0;
@@ -262,6 +268,7 @@ export class ObsidianGraphElement extends LitElement {
       bottom: 8px;
       font: 11px/1.5 sans-serif;
     }
+    ${graphActionStyles}
   `
 
   constructor() {
@@ -437,80 +444,92 @@ export class ObsidianGraphElement extends LitElement {
   }
 
   protected render() {
-    const { theme } = this.displayOptions()
+    const { theme, dark } = this.displayOptions()
+    const unavailable = this.status !== 'ready' || !this.payload || !this.renderer
     return html`
       <div
         class="frame"
-        style=${`--graph-bg:${theme.background};--graph-text:${theme.label};--graph-accent:${theme.focusNode}`}
+        style=${`--graph-bg:${theme.background};--graph-text:${theme.label};--graph-accent:${theme.focusNode};--graph-tool-bg:${dark ? '#171717e6' : '#ffffffe6'};--graph-tool-border:${dark ? '#ffffff1a' : '#0f172a14'};--graph-tool-color:${dark ? '#d1d5db' : '#6b7280'};--graph-tool-active:${dark ? '#f3f4f6' : '#1f2937'};--graph-tool-hover:${dark ? '#ffffff1a' : '#f3f4f6'}`}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === 'Escape' && this.settingsOpen) {
+            this.settingsOpen = false
+            this.requestUpdate()
+            this.renderRoot.querySelector<HTMLButtonElement>('[aria-label="图谱设置"]')?.focus()
+          }
+        }}
       >
         <div class="stage" part="canvas"></div>
-        <div class="controls" aria-label="图谱工具栏">
-          <button aria-label="放大" @click=${() => this.renderer?.zoomBy(1.25)}>+</button>
-          <button aria-label="缩小" @click=${() => this.renderer?.zoomBy(0.8)}>−</button>
-          <button aria-label="重置视图" @click=${() => this.renderer?.resetViewport()}>⤢</button>
-          <button
-            aria-label="图谱设置"
-            aria-expanded=${this.settingsOpen}
-            @click=${() => {
+        <div class="controls controls-main" role="group" aria-label="图谱工具栏">
+          ${graphAction('refresh', '刷新图谱', () => void this.load(), {
+            disabled: this.status === 'loading',
+            busy: this.status === 'loading',
+          })}
+          ${graphAction(
+            'settings',
+            '图谱设置',
+            () => {
               this.settingsOpen = !this.settingsOpen
               this.requestUpdate()
-            }}
-          >
-            ⚙
-          </button>
+            },
+            { expanded: this.settingsOpen },
+          )}
+          ${graphAction('replay', '播放关系图谱生成动画', () => this.renderer?.replay(), {
+            disabled: unavailable,
+          })}
+        </div>
+        <div class="controls controls-viewport" role="group" aria-label="图谱视图操作">
+          ${graphAction('zoomIn', '放大', () => this.renderer?.zoomBy(1.25), { disabled: unavailable })}
+          ${graphAction('zoomOut', '缩小', () => this.renderer?.zoomBy(0.8), { disabled: unavailable })}
+          ${graphAction('refresh', '重置视图', () => this.renderer?.resetViewport(), { disabled: unavailable })}
         </div>
         ${
           this.settingsOpen
-            ? html`<div class="settings">
+            ? html`<section class="settings" aria-label="图谱设置">
+                <h3 class="settings-title">显示设置</h3>
                 <input
                   type="search"
                   aria-label="搜索节点"
                   placeholder="搜索节点…"
                   .value=${this.keyword}
                   @input=${(e: Event) => {
-                  this.keyword = (e.target as HTMLInputElement).value
-                  this.renderer?.setHighlight(this.keyword)
-                }}
+                    this.keyword = (e.target as HTMLInputElement).value
+                    this.renderer?.setHighlight(this.keyword)
+                  }}
                 />
                 <label
-                  ><input
+                  >显示名称<input
                     type="checkbox"
                     .checked=${this.showLabels}
                     @change=${(e: Event) => {
-                    this.showLabels = (e.target as HTMLInputElement).checked
-                  }}
-                  />显示名称</label
-                >
+                      this.showLabels = (e.target as HTMLInputElement).checked
+                    }}
+                /></label>
                 <label
-                  ><input
+                  >显示箭头<input
                     type="checkbox"
                     .checked=${this.showArrows}
                     @change=${(e: Event) => {
-                    this.showArrows = (e.target as HTMLInputElement).checked
-                  }}
-                  />显示箭头</label
-                >
+                      this.showArrows = (e.target as HTMLInputElement).checked
+                    }}
+                /></label>
                 <label
-                  ><input
+                  >分类与标签<input
                     type="checkbox"
                     .checked=${this.showTaxonomy}
                     @change=${(e: Event) => {
-                    this.showTaxonomy = (e.target as HTMLInputElement).checked
-                  }}
-                  />分类与标签</label
-                >
+                      this.showTaxonomy = (e.target as HTMLInputElement).checked
+                    }}
+                /></label>
                 <label
-                  ><input
+                  >分组颜色<input
                     type="checkbox"
                     .checked=${this.groups}
                     @change=${(e: Event) => {
-                    this.groups = (e.target as HTMLInputElement).checked
-                    this.syncTheme()
-                  }}
-                  />分组颜色</label
-                >
-                <button @click=${() => this.renderer?.replay()}>重新布局</button>
-              </div>`
+                      this.groups = (e.target as HTMLInputElement).checked
+                      this.syncTheme()
+                    }}
+                /></label>
+              </section>`
             : nothing
         }
         ${this.status === 'ready' && this.payload?.truncated ? html`<div class="notice">节点数量已达上限，请缩小图谱范围</div>` : nothing}
@@ -523,7 +542,7 @@ export class ObsidianGraphElement extends LitElement {
         ${
           this.status === 'forbidden'
             ? html`<div class="overlay">
-                关系图谱未开放匿名访问，请在插件设置中开启「允许匿名访问图谱」。
+                关系图谱未开放匿名访问，请在插件设置中开启「开放主题端图谱」。
               </div>`
             : nothing
         }

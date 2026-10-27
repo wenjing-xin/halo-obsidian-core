@@ -29,6 +29,8 @@
 - Resolve implicit current-article context on the server when rendering article content; never guess an article from its URL or silently fall back to the global graph.
 - Preserve post/category/tag node identities, wikilink direction, taxonomy links, leaf-category rules, exclusions and graph limits. Taxonomy hubs must not make unrelated articles wiki neighbors in a local graph.
 - Theme components default to automatic theme following, with explicit light/dark overrides. Observe theme changes, honor CSS variables and clean up observers/listeners/workers on disconnect.
+- Anchor Sigma drawing and picking layers to the container's top-left origin; verify graph dragging in centered article content, not only Console layouts.
+- Editor previews use the authenticated scoped preview service and may include saved draft nodes. Never reuse that service from the anonymous endpoint or serialize the editor's current article as a fixed local center.
 - Follow `.trae/example/plugin-comment-widget-main` for theme conventions. Keep legacy serialized attributes compatible.
 
 ## Security and UI
@@ -37,6 +39,7 @@
 - Use Halo components, shared stores/utils and FormKit before custom equivalents; use the existing `axiosInstance` API wrapper.
 - Use `VPageHeader`, `VCard` header/footer slots, explicit loading/error/empty states and responsive layouts. The backlink management page has an outer `md:m-4` margin and distinct responsive statistic cards.
 - Markdown authors copy `<obsidian-core-link post="..." url="..." title="...">text</obsidian-core-link>` tags through the native article-row dropdown's `post:list-item:operation:create` extension. No migration of old anchor tags is needed before release. The `post` attribute drives backlink indexing; `url` is a safe navigation fallback only for URL-only tags. Escape all copied attributes/text and reject unsafe URL schemes.
+- Keep the lightweight link custom element registered in Console and theme pages independently from anonymous graph access. Its shadow DOM owns its presentation; global fallback styles target undefined custom elements and SSR anchors only. Never decode arbitrary escaped article HTML when restoring Markdown tags.
 - Graph toolbar actions use uniform 20px icons on single 36px pale backgrounds with subtle hover changes, tooltips and keyboard support; no nested Halo button chrome. Relation lists use Halo `VEntity`/`VEntityField`, title-to-editor navigation, metadata/status and native dropdown slots.
 - Do not hand-edit generated API clients, built bundles or packaged resources. Change source and rebuild. Do not commit credentials, local fixture data or unrelated changes.
 

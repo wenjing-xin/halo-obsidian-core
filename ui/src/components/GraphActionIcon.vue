@@ -16,7 +16,7 @@
 
   const btnClass = computed(() => {
     const base =
-      'inline-flex h-8 w-8 flex-none items-center justify-center rounded-full p-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 [&>svg]:h-[18px] [&>svg]:w-[18px] [&>svg]:flex-none'
+      'inline-flex h-9 w-9 flex-none items-center justify-center rounded-full p-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:flex-none'
     const tone = props.bare
       ? props.dark
         ? 'bg-transparent text-gray-300 hover:bg-white/10 hover:text-gray-100'

@@ -7,67 +7,43 @@ spec:
     - group: obsidian
       label: 双链与图谱
       formSchema:
-        - $el: h1
-          attrs:
-            type: heading
-            level: 3
-          children: 基础
-        - $formkit: checkbox
-          name: renderWikilinks
-          label: 前台渲染双链
-          value: true
-          help: 开启后前台文章内容中的 [[...]] 会自动渲染为指向目标文章的链接
-        - $formkit: checkbox
-          name: caseSensitive
-          label: 标题匹配区分大小写
-          value: false
-        - $formkit: checkbox
-          name: renderBrokenLinks
-          label: 未解析链接弱化渲染
-          value: false
-          help: 未解析的 [[...]] 以弱化样式渲染（默认保留原文）
-        - $el: h1
-          attrs:
-            type: heading
-            level: 3
-          children: 关系图谱
         - $formkit: checkbox
           name: allowAnonymousGraph
-          label: 主题端匿名展示图谱
+          label: 开放主题端图谱
           value: false
-          help: 开启后未登录访客可在主题端查看关系图谱
-        - $formkit: select
-          name: anonymousGraphDefaultMode
-          label: 内嵌图谱默认模式
-          value: full
-          options:
-            - label: 全站图谱
-              value: full
-            - label: 局部图谱
-              value: local
-            - label: 指定节点子图
-              value: nodes
-        - $formkit: checkbox
-          name: graphDefaultShowTaxonomy
-          label: 默认显示分类/标签节点
-          value: true
-        - $formkit: checkbox
-          name: graphDefaultCollapseCategories
-          label: 默认折叠大分类
-          value: false
+          help: 允许访客查看公开文章的关系图谱；范围和外观在插入图谱时设置。
         - $formkit: number
           name: graphMaxNodes
-          label: 图谱节点渲染上限
+          label: 节点上限
           value: 500
           min: 50
           max: 5000
-        - $formkit: categorySelect
-          name: excludeCategories
-          label: 排除分类
-          multiple: true
-          help: 这些分类及其归属边不会出现在图谱中（不影响双链索引）
-        - $formkit: tagSelect
-          name: excludeTags
-          label: 排除标签
-          multiple: true
-          help: 这些标签及其归属边不会出现在图谱中（不影响双链索引）
+          help: 限制单个图谱的节点数量，避免大图谱影响页面性能。
+        - $el: details
+          children:
+            - $el: summary
+              children: 高级设置
+            - $formkit: categorySelect
+              name: excludeCategories
+              label: 排除分类
+              multiple: true
+              help: 隐藏这些分类节点及其归属边，不影响文章和双链索引。
+            - $formkit: tagSelect
+              name: excludeTags
+              label: 排除标签
+              multiple: true
+              help: 隐藏这些标签节点及其归属边，不影响文章和双链索引。
+            - $formkit: checkbox
+              name: renderWikilinks
+              label: 渲染标题式双链
+              value: true
+              help: 兼容 [[标题]] 写法；不影响 obsidian-core-link 标签。
+            - $formkit: checkbox
+              name: caseSensitive
+              label: 标题匹配区分大小写
+              value: false
+            - $formkit: checkbox
+              name: renderBrokenLinks
+              label: 弱化未解析的标题式双链
+              value: false
+              help: 为未解析的 [[标题]] 显示弱化样式，默认保留原文。

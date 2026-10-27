@@ -20,7 +20,7 @@ const NODE_NAME = 'obsidianGraph'
  * - editor toolbox ("插入关系图谱")
  * - slash command ("/关系图谱")
  * The graph range (full / local / nodes) is configured per block via the
- * NodeView's "配置" button, which opens GraphInsertModal. New blocks require configuration before preview.
+ * NodeView's "配置" button. New blocks immediately preview the full graph.
  */
 export const GraphNode = Node.create({
   name: NODE_NAME,
@@ -44,7 +44,7 @@ export const GraphNode = Node.create({
               editor
                 .chain()
                 .focus()
-                .insertContent({ type: NODE_NAME, attrs: { mode: 'local', configured: false } })
+                .insertContent({ type: NODE_NAME, attrs: { mode: 'full' } })
                 .run()
             },
           },
@@ -61,7 +61,7 @@ export const GraphNode = Node.create({
               .chain()
               .focus()
               .deleteRange(range)
-              .insertContent({ type: NODE_NAME, attrs: { mode: 'local', configured: false } })
+              .insertContent({ type: NODE_NAME, attrs: { mode: 'full' } })
               .run()
           },
         }

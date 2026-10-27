@@ -7,6 +7,7 @@ import ObsidianGraphCanvas from '../components/ObsidianGraphCanvas.vue'
 import type { GraphPayload } from '../shared/graph-renderer/types'
 import GraphInsertModal, { type GraphAttrs } from './GraphInsertModal.vue'
 import GraphResizeFrame from './GraphResizeFrame.vue'
+import { currentPostName } from './picker-position'
 import {
   normalizeGraphHeight,
   normalizeGraphWidth,
@@ -20,9 +21,11 @@ import {
 
 const props = defineProps(nodeViewProps)
 
-const modalVisible = ref(props.node?.attrs.configured === false)
+const modalVisible = ref(false)
+const editorPost = ref(currentPostName(window.location.href))
+const previewPost = computed(() => props.node?.attrs.post || editorPost.value)
 const currentPostPending = computed(
-  () => props.node?.attrs.mode === 'local' && !props.node?.attrs.post,
+  () => props.node?.attrs.mode === 'local' && !previewPost.value,
 )
 
 // ---------------------------------------------------------------------------
@@ -38,7 +41,7 @@ let fetchSeq = 0
 async function loadGraph() {
   const attrs = props.node?.attrs ?? {}
   const seq = ++fetchSeq
-  if (attrs.configured === false || (attrs.mode === 'local' && !attrs.post)) {
+  if (attrs.mode === 'local' && !previewPost.value) {
     payload.value = null
     loading.value = false
     loadError.value = ''
@@ -49,7 +52,7 @@ async function loadGraph() {
   try {
     const { data } = await fetchConsoleGraphPreview({
       mode: attrs.mode || 'full',
-      post: attrs.post || undefined,
+      post: previewPost.value || undefined,
       nodes: attrs.nodes
         ? String(attrs.nodes)
             .split(',')
@@ -80,6 +83,7 @@ watch(
     props.node?.attrs.post,
     props.node?.attrs.nodes,
     props.node?.attrs.depth,
+    previewPost.value,
   ],
   loadGraph,
   { immediate: true },
@@ -98,9 +102,16 @@ function syncPreviewTheme() {
 watch(() => [props.node?.attrs.theme, props.node?.attrs.dark], syncPreviewTheme)
 onMounted(() => {
   if (frameRef.value) stopTheme = observeGraphTheme(frameRef.value, syncPreviewTheme)
+  // Halo may create the article after the node view mounts. Track the saved
+  // article identity without serializing it into an implicit local graph.
+  props.editor.on('transaction', syncEditorPost)
 })
+function syncEditorPost() {
+  editorPost.value = currentPostName(window.location.href)
+}
 onBeforeUnmount(() => {
   stopTheme?.()
+  props.editor.off('transaction', syncEditorPost)
   fetchSeq++
 })
 
@@ -238,7 +249,7 @@ function closeConfig() {
           <span v-if="loading">图谱加载中…</span>
           <span v-else-if="loadError">图谱加载失败：{{ loadError }}</span>
           <span v-else-if="currentPostPending"
-            >当前文章局部图谱将在发布后自动绑定本文；可在配置中调整深度。</span
+            >请先保存当前文章，或在配置中选择中心文章后预览局部图谱。</span
           >
           <span v-else>该范围内暂无图谱节点，请在配置中调整范围。</span>
         </div>

@@ -11,11 +11,16 @@ final class StructuredLinkHtmlProcessor {
     private StructuredLinkHtmlProcessor() {
     }
 
+    static boolean containsTag(String html) {
+        return !StructuredLinkTag.find(MarkdownLinkTagDecoder.decode(html)).isEmpty();
+    }
+
     static String render(String html, Function<String, Optional<PostTarget>> resolver) {
-        StringBuilder output = new StringBuilder(html.length());
+        String normalized = MarkdownLinkTagDecoder.decode(html);
+        StringBuilder output = new StringBuilder(normalized.length());
         int cursor = 0;
-        for (var link : StructuredLinkTag.find(html)) {
-            output.append(html, cursor, link.start());
+        for (var link : StructuredLinkTag.find(normalized)) {
+            output.append(normalized, cursor, link.start());
             // A known article identity wins over a stale copied URL; missing targets are not followed.
             Optional<String> url = link.post().isBlank() ? StructuredLinkTag.safeUrl(link.url())
                 : resolver.apply(link.post()).flatMap(target -> StructuredLinkTag.safeUrl(target.permalink()));
@@ -37,6 +42,7 @@ final class StructuredLinkHtmlProcessor {
             }
             cursor = link.end();
         }
-        return output.append(html, cursor, html.length()).toString();
+        return output.append(normalized, cursor, normalized.length()).toString();
     }
+
 }

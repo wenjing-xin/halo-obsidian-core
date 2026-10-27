@@ -58,4 +58,20 @@ class ObsidianPostContentHandlerTest {
         assertThat(result.getContent()).contains("data-current-post=\"current\"");
         verifyNoInteractions(cache);
     }
+
+    @Test
+    void markdownEscapedTagsAreDetectedWithoutLegacySyntaxOrAnonymousGraph() {
+        var cache = mock(PostLinkIndexCache.class);
+        when(cache.warmup()).thenReturn(Mono.empty());
+        when(cache.lookupByName("p1")).thenReturn(Optional.of(
+            new PostLinkIndexCache.PostTarget("p1", "Article", "/current")));
+        var settings = new ObsidianSettings();
+        settings.setRenderWikilinks(false);
+        settings.setAllowAnonymousGraph(false);
+        var context = PostContentContext.builder().content(
+            "<p>&lt;obsidian-core-link post=&quot;p1&quot;&gt;Alias&lt;/obsidian-core-link&gt;</p>")
+            .build();
+        assertThat(new ObsidianPostContentHandler(cache, settings).handle(context)
+            .block().getContent()).contains("href=\"/current\"", ">Alias</a>");
+    }
 }

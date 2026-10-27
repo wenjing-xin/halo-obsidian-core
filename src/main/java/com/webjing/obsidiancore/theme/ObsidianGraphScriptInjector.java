@@ -39,6 +39,9 @@ public class ObsidianGraphScriptInjector implements TemplateHeadProcessor {
         final IModelFactory modelFactory = context.getModelFactory();
         model.add(modelFactory.createText("<link rel=\"stylesheet\" href=\""
             + "/plugins/obsidian-core/assets/static/obsidian-links.css\">"));
+        model.add(modelFactory.createText("<script type=\"module\" src=\""
+            + "/plugins/obsidian-core/assets/static/obsidian-graph/obsidian-link.js?version="
+            + pluginContext.getVersion() + "\"></script>"));
         if (settings.isAllowAnonymousGraph()) {
             model.add(modelFactory.createText(obsidianGraphScript()));
         }

@@ -74,6 +74,34 @@ class GraphServiceTest {
     }
 
     @Test
+    void editorPreviewIncludesDraftCenterWithoutLeakingItToPublicGraph() {
+        var draft = post("draft");
+        draft.getSpec().setReleaseSnapshot(null);
+        draft.getSpec().setPublish(false);
+        var privatePost = post("private");
+        privatePost.getSpec().setVisible(Post.VisibleEnum.PRIVATE);
+        when(client.listAll(eq(Post.class), any(), any())).thenReturn(
+            Flux.just(post("a"), draft, privatePost));
+
+        assertThat(service.buildConsoleGraphPreview(query("local", "draft", Set.of(), 1))
+            .block().nodes()).extracting(GraphNode::id).containsExactly("draft");
+        assertThat(service.buildConsoleGraphPreview(query("nodes", null,
+            Set.of("draft", "private"), 1)).block().nodes())
+            .extracting(GraphNode::id).containsExactlyInAnyOrder("draft", "private");
+        assertThat(service.buildPublicGraph(query("full", null, Set.of(), 1)).block().nodes())
+            .extracting(GraphNode::id).containsExactly("a");
+        assertThat(service.buildPublicGraph(query("local", "draft", Set.of(), 1)).block().nodes())
+            .isEmpty();
+    }
+
+    @Test
+    void previewScopeValidationNeverFallsBackToGlobal() {
+        assertThatThrownBy(() -> service.buildConsoleGraphPreview(
+            query("local", null, Set.of(), 1)).block())
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void truncatedGraphKeepsLocalCenterAndNoDanglingEdges() {
         settings.setGraphMaxNodes(1);
         var graph = service.buildPublicGraph(query("local", "c", Set.of(), 2)).block();

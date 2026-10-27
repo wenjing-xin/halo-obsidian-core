@@ -69,20 +69,29 @@ public class GraphServiceImpl implements GraphService {
 
     @Override
     public Mono<GraphPayload> buildPublicGraph(PublicGraphQuery query) {
+        return buildScopedGraph(query, true);
+    }
+
+    @Override
+    public Mono<GraphPayload> buildConsoleGraphPreview(PublicGraphQuery query) {
+        return buildScopedGraph(query, false);
+    }
+
+    private Mono<GraphPayload> buildScopedGraph(PublicGraphQuery query, boolean publicOnly) {
         String mode = query.mode() == null ? "full" : query.mode();
         int depth = Math.min(Math.max(query.depth() <= 0 ? 1 : query.depth(), 1), MAX_DEPTH);
-        GraphQuery base = new GraphQuery(null, Set.of(), Set.of(), query.showBroken(), false,
+        GraphQuery base = new GraphQuery(null, Set.of(), Set.of(), query.showBroken(), !publicOnly,
             query.showTaxonomy(), false);
         return switch (mode) {
             case "local" -> query.post() == null || query.post().isBlank()
                 ? Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Local graph requires a center post"))
-                : buildGraph(base, true, query.post(), null, depth);
+                : buildGraph(base, publicOnly, query.post(), null, depth);
             case "nodes" -> query.nodes() == null || query.nodes().isEmpty()
                 ? Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Selected graph requires at least one post"))
-                : buildGraph(base, true, null, query.nodes(), 0);
-            case "full" -> buildGraph(base, true, null, null, 0);
+                : buildGraph(base, publicOnly, null, query.nodes(), 0);
+            case "full" -> buildGraph(base, publicOnly, null, null, 0);
             default -> Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "Unknown graph mode"));
         };
@@ -110,8 +119,7 @@ public class GraphServiceImpl implements GraphService {
                 if (spec.getTitle() == null || spec.getTitle().isBlank()) {
                     return false;
                 }
-                return spec.getReleaseSnapshot() != null
-                    && !spec.getReleaseSnapshot().isBlank();
+                return true;
             })
             .collectList();
         var categoriesMono = client.listAll(Category.class, options(), Sort.unsorted())
@@ -146,11 +154,16 @@ public class GraphServiceImpl implements GraphService {
         // 1. Candidate posts after visibility and filters.
         Map<String, Post> postById = new LinkedHashMap<>();
         for (Post post : posts) {
-            if (publicOnly && (!Post.isPublic(post.getSpec())
-                || !Boolean.TRUE.equals(post.getSpec().getPublish()))) {
+            var spec = post.getSpec();
+            boolean released = spec.getReleaseSnapshot() != null
+                && !spec.getReleaseSnapshot().isBlank();
+            if (publicOnly && (!Post.isPublic(spec)
+                || !Boolean.TRUE.equals(spec.getPublish()) || !released)) {
                 continue;
             }
-            var spec = post.getSpec();
+            if (!publicOnly && !query.includeDraft() && !released) {
+                continue;
+            }
             if (query.keyword() != null && !query.keyword().isBlank()
                 && !spec.getTitle().toLowerCase(Locale.ROOT)
                     .contains(query.keyword().toLowerCase(Locale.ROOT))) {

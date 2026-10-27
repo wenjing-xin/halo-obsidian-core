@@ -66,6 +66,9 @@ it('starts collapsed and exposes uniformly sized standalone icon actions', async
   expect(refresh.attributes('role')).toBe('button')
   // Collapsed state: icons are bare inside a vertical pill toolbar.
   expect(refresh.classes()).toContain('rounded-full')
+  expect(refresh.classes()).toContain('h-9')
+  expect(refresh.classes()).toContain('w-9')
+  expect(refresh.classes()).toContain('[&>svg]:h-5')
   expect(refresh.element.parentElement?.className).toContain('rounded-full')
   expect(wrapper.findAll('[role="button"]')).toHaveLength(7)
   expect(refresh.element.querySelector('button')).toBeNull()

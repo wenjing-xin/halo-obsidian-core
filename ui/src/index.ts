@@ -1,4 +1,5 @@
 import 'virtual:uno.css'
+import './shared/wikilink-element'
 import { definePlugin } from '@halo-dev/ui-shared'
 import { IconDashboard } from '@halo-dev/components'
 import { markRaw } from 'vue'

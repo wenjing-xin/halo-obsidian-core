@@ -17,6 +17,51 @@ class StructuredLinkHtmlProcessorTest {
     }
 
     @Test
+    void rendersMarkdownEscapedCustomElement() {
+        String markdownHtml = "<p>&lt;obsidian-core-link post=&quot;p1&quot; url=&quot;/old&quot;"
+            + " title=&quot;Article&quot;&gt;A &amp; B&lt;/obsidian-core-link&gt;</p>";
+        assertThat(StructuredLinkHtmlProcessor.containsTag(markdownHtml)).isTrue();
+
+        String result = StructuredLinkHtmlProcessor.render(markdownHtml,
+            name -> Optional.of(new PostTarget(name, "Article", "/current")));
+        assertThat(result).contains("href=\"/current\"", ">A &amp; B</a>")
+            .doesNotContain("&lt;obsidian-core-link", "/old");
+    }
+
+    @Test
+    void leavesEscapedCustomElementExamplesInCodeAndCommentsUntouched() {
+        String example = "&lt;obsidian-core-link post=&quot;p1&quot;&gt;Text"
+            + "&lt;/obsidian-core-link&gt;";
+        String html = "<pre><code>" + example + "</code></pre><!-- " + example + " -->";
+        assertThat(StructuredLinkHtmlProcessor.containsTag(html)).isFalse();
+        assertThat(StructuredLinkHtmlProcessor.render(html, name -> Optional.empty()))
+            .isEqualTo(html);
+    }
+
+    @Test
+    void doesNotInjectDecodedMarkupFromMalformedEscapedTag() {
+        String html = "<p>&lt;obsidian-core-link url=&quot;/safe&quot; title=&quot;"
+            + "&quot;&gt;&lt;img src=x onerror=alert(1)&gt;"
+            + "&lt;/obsidian-core-link&gt;&lt;script&gt;alert(1)&lt;/script&gt;</p>";
+        String result = StructuredLinkHtmlProcessor.render(html, name -> Optional.empty());
+        assertThat(result).doesNotContain("<img", "<script", "onerror=")
+            .contains("href=\"/safe\"", "&lt;script&gt;");
+
+        String malformed = "&lt;obsidian-core-link url=&quot;/safe&quot; title=&quot;"
+            + "&quot;&gt;&lt;img src=x onerror=alert(1)&gt;&lt;/obsidian-core-link&gt;"
+            + "&lt;img src=x onerror=alert(2)&gt;&lt;/obsidian-core-link&gt;";
+        assertThat(StructuredLinkHtmlProcessor.render(malformed, name -> Optional.empty()))
+            .doesNotContain("<img", "<script");
+    }
+
+    @Test
+    void handlesLiteralAttributeQuotesAndSelfClosingEscapedTags() {
+        String html = "<p>&lt;obsidian-core-link url='/safe' title='A &gt; B' /&gt;</p>";
+        assertThat(StructuredLinkHtmlProcessor.render(html, name -> Optional.empty()))
+            .contains("href=\"/safe\"", "A &gt; B</a>");
+    }
+
+    @Test
     void urlOnlyTagsUseSafeUrlAndTitleFallbackWithoutLookingUpArticle() {
         String result = StructuredLinkHtmlProcessor.render(
             "<obsidian-core-link url=\"https://example.com/page\" title=\"Example\" target=\"_self\"></obsidian-core-link>",

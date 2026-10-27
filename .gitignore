@@ -84,6 +84,7 @@ application-local.properties
 /workplace/
 /src/main/resources/ui/
 .trae/
+.claude/
+.agents/
+.vscode/
 AGENTS.md
-# Keep repository-specific development guidance versioned.
-!/AGENTS.md
