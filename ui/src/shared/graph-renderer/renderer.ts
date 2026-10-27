@@ -19,6 +19,7 @@ import {
   type ObsidianTheme,
 } from './obsidian-theme'
 import type { EdgeType, GraphEdge, GraphNode, GraphPayload, NodeType } from './types'
+import { NodeLabelLayer } from './node-label-layer'
 
 export interface RendererForces {
   /** FA2 gravity pulling nodes toward the center (0 - 1). */
@@ -143,6 +144,8 @@ export class GraphRenderer {
 
   private sigma: Sigma<NodeAttrs, EdgeAttrs>
 
+  private labels: NodeLabelLayer
+
   private layout: FA2LayoutSupervisor<NodeAttrs, EdgeAttrs> | null = null
 
   private settleTimer: ReturnType<typeof setTimeout> | null = null
@@ -264,7 +267,9 @@ export class GraphRenderer {
         },
       },
       settings: {
-        renderLabels: true,
+        // Native SDF labels only sample the first atlas page; large mixed-language
+        // graphs can therefore show fragments of unrelated letters and punctuation.
+        renderLabels: false,
         renderEdgeLabels: false,
         enableEdgeEvents: false,
         enableNodeDrag: true,
@@ -295,6 +300,11 @@ export class GraphRenderer {
       layer.style.margin = '0'
       layer.style.display = 'block'
     }
+
+    this.labels = new NodeLabelLayer(this.sigma, this.container, (key) =>
+      this.graph.getNodeAttribute(key, 'label'),
+    )
+    this.sigma.on('afterRender', () => this.labels.draw(this.graph.nodes()))
 
     this.sigma.on('enterNode', ({ node }) => this.setFocus(node))
     this.sigma.on('leaveNode', () => this.setFocus(null))
@@ -370,6 +380,7 @@ export class GraphRenderer {
     if (this.destroyed) {
       return
     }
+    this.labels.clearMeasurements()
     if (this.settleTimer) clearTimeout(this.settleTimer)
     this.settleTimer = null
     this.layout?.stop()
@@ -522,8 +533,6 @@ export class GraphRenderer {
     }
     this.theme = { ...(this.opts.dark ? OBSIDIAN_THEME : OBSIDIAN_LIGHT_THEME), ...this.opts.theme }
     this.container.style.background = this.theme.background
-    // Keep the label pass active so hovered titles remain visible when labels are off.
-    this.sigma.setSettings({ renderLabels: true })
     if (forcesChanged) {
       this.applyForces(distanceChanged)
     }
@@ -615,6 +624,7 @@ export class GraphRenderer {
     }
     this.resizeObserver?.disconnect()
     this.resizeObserver = null
+    this.labels.destroy()
     this.layout?.kill()
     this.layout = null
     this.sigma.kill()
@@ -873,6 +883,10 @@ export class GraphRenderer {
     const scale = this.nodeScale.get(key) ?? 1
     const growth = this.nodeGrowth.get(key) ?? 0
     const out: Partial<NodeDisplayData> = {}
+
+    // Disabling renderLabels alone still pre-generates the native glyph atlas.
+    // Keep titles in graph attributes, not Sigma's GPU label data.
+    out.label = null
 
     out.size = attrs.baseSize * this.opts.nodeSize * scale * this.autoScale * growth
 

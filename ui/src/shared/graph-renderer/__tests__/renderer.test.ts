@@ -47,6 +47,7 @@ import { GraphRenderer } from '../renderer'
 let renderer: GraphRenderer
 beforeEach(() => {
   vi.useFakeTimers()
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -60,6 +61,7 @@ afterEach(() => {
   renderer.destroy()
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 const payload: GraphPayload = {
   nodes: ['focus', 'neighbor', 'other'].map((id) => ({
@@ -139,7 +141,10 @@ it('preserves reciprocal links and still shows hovered titles when labels are of
   vi.advanceTimersByTime(2000)
   expect(display('focus').labelVisibility).toBe('visible')
   expect(display('neighbor').labelVisibility).toBe('hidden')
-  expect(state.sigma.setSettings).toHaveBeenLastCalledWith({ renderLabels: true })
+  expect(state.sigma.options.settings.renderLabels).toBe(false)
+  expect(state.sigma.setSettings).not.toHaveBeenCalled()
+  expect(display('focus').label).toBeNull()
+  expect(state.sigma.graph.getNodeAttribute('focus', 'label')).toBe('focus')
 })
 
 it('reveals nodes one at a time from deterministic disk positions', () => {

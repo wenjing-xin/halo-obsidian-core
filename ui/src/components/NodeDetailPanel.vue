@@ -1,62 +1,54 @@
 <script setup lang="ts">
-  import { VButton, VCard, VTag } from '@halo-dev/components'
-  import IconCloseLine from '~icons/ri/close-line'
-  import { computed } from 'vue'
-  import type { GraphNode } from '../shared/graph-renderer/types'
+import { IconClose, VButton, VCard, VTag } from '@halo-dev/components'
+import { computed } from 'vue'
+import type { GraphNode } from '../shared/graph-renderer/types'
 
-  const props = defineProps<{
-    node: GraphNode | null
-  }>()
+const props = defineProps<{
+  node: GraphNode | null
+}>()
 
-  const emit = defineEmits<{
-    (e: 'close'): void
-    (e: 'view-backlinks', node: GraphNode): void
-    (e: 'open-post', node: GraphNode): void
-  }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'view-backlinks', node: GraphNode): void
+  (e: 'open-post', node: GraphNode): void
+}>()
 
-  const typeLabel: Record<string, string> = {
-    post: '文章',
-    category: '分类',
-    tag: '标签',
-  }
+const typeLabel: Record<string, string> = {
+  post: '文章',
+  category: '分类',
+  tag: '标签',
+}
 
-  const typeBadgeClass = computed(() => {
-    const base = 'mt-0.5 flex-none rounded px-1.5 py-0.5 text-[11px] leading-4'
-    switch (props.node?.type) {
-      case 'category':
-        return `${base} bg-[#a882ff]/15 text-[#a882ff]`
-      case 'tag':
-        return `${base} bg-[#69d2a8]/15 text-[#69d2a8]`
-      default:
-        return `${base} bg-[#7cb8ff]/15 text-[#7cb8ff]`
-    }
-  })
-
-  const hasActions = computed(
-    () => props.node?.type === 'post' && !props.node?.broken,
-  )
+const hasActions = computed(() => props.node?.type === 'post' && !props.node?.broken)
 </script>
 
 <template>
   <VCard
     v-if="node"
-    class="absolute left-3 top-3 z-[5] w-[264px] shadow-lg"
+    class="absolute left-3 top-3 z-[5] w-80 max-w-[calc(100%_-_1.5rem)] shadow-lg"
     :body-class="['!p-3']"
   >
     <template #header>
-      <div class="flex w-full items-start gap-2">
-        <span :class="typeBadgeClass">{{ typeLabel[node.type] ?? node.type }}</span>
-        <h3 class="m-0 flex-1 break-all text-sm font-semibold leading-5" :title="node.title">
+      <div class="flex min-w-0 w-full items-center gap-2 px-3 py-2.5">
+        <VTag :theme="node.broken ? 'danger' : 'default'" class="!cursor-default">
+          {{ typeLabel[node.type] ?? node.type }}
+        </VTag>
+        <h3 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold leading-5" :title="node.title">
           {{ node.title }}
         </h3>
-        <button
-          type="button"
-          aria-label="关闭"
-          class="flex-none cursor-pointer border-0 bg-transparent p-0 text-gray-400 transition-colors hover:text-gray-700 [&>svg]:h-4 [&>svg]:w-4"
+        <VButton
+          v-tooltip="'关闭详情'"
+          type="secondary"
+          size="xs"
+          ghost
+          aria-label="关闭详情"
+          class="!h-7 !w-7 flex-none !p-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           @click="emit('close')"
         >
-          <IconCloseLine />
-        </button>
+          <template #icon>
+            <IconClose class="!h-4 !w-4" />
+          </template>
+        </VButton>
       </div>
     </template>
 
