@@ -19,6 +19,7 @@ export default definePlugin({
         meta: {
           title: '关系图谱',
           searchable: true,
+          permissions: ['plugin:obsidian-core:view'],
           menu: {
             name: '关系图谱',
             group: 'content',

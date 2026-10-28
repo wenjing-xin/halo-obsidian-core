@@ -10,6 +10,14 @@ class ObsidianSettingsTest {
     private final JsonMapper mapper = JsonMapper.builder().build();
 
     @Test
+    void missingConfigurationClosesPreviouslyEnabledPublicGraph() {
+        var settings = new ObsidianSettings();
+        settings.setAllowAnonymousGraph(true);
+        settings.update(null);
+        assertThat(settings.isAllowAnonymousGraph()).isFalse();
+    }
+
+    @Test
     void readsJacksonThreeSettingsAndExclusions() {
         var settings = new ObsidianSettings();
         settings.update(mapper.readTree("""

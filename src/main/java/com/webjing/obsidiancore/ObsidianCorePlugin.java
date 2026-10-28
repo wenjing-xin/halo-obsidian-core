@@ -69,6 +69,8 @@ public class ObsidianCorePlugin extends BasePlugin implements InitializingBean, 
 
     @EventListener
     public void onConfigUpdated(PluginConfigUpdatedEvent event) {
+        // If reading the new configuration fails, never retain an old public-access grant.
+        obsidianSettings.setAllowAnonymousGraph(false);
         obsidianSettings.update(settingFetcher.getSettingValue(ObsidianSettings.SETTING_GROUP));
         log.info("obsidian-core settings reloaded");
     }

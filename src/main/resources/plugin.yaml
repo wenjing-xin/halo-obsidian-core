@@ -5,20 +5,22 @@ kind: Plugin
 metadata:
   # The name defines how the plugin is invoked, A unique name
   name: obsidian-core
+  annotations:
+    store.halo.run/app-id: app-zpu0pwze
 spec:
   enabled: true
   requires: ">=2.27.0"
   author:
     name: webjing
-    website: https://github.com/webjing
+    website: https://auth.webjing.com
   logo: logo.png
-  homepage: https://github.com/webjing/obsidian-core#readme
-  repo: https://github.com/webjing/obsidian-core
-  issues: https://github.com/webjing/obsidian-core/issues
+  homepage: https://github.com/wenjing-xin/halo-obsidian-core#readme
+  repo: https://github.com/wenjing-xin/halo-obsidian-core
+  issues: https://github.com/wenjing-xin/halo-obsidian-core/issues
   displayName: "Halo 知链"
   description: "Halo 双链与知识图谱插件，支持文章关联、反向链接、断链检测与交互式图谱。"
   settingName: obsidian-core-settings
   configMapName: obsidian-core-configmap
   license:
     - name: "GPL-3.0"
-      url: "https://github.com/webjing/obsidian-core/blob/main/LICENSE"
+      url: "https://github.com/wenjing-xin/halo-obsidian-core/blob/main/LICENSE"

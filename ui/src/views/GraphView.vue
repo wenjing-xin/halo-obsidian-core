@@ -8,6 +8,7 @@
   import IconSubtractLine from '~icons/ri/subtract-line'
   import GraphActionIcon from '../components/GraphActionIcon.vue'
   import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+  import { utils } from '@halo-dev/ui-shared'
   import {
     fetchCategoryOptions,
     fetchConsoleGraph,
@@ -228,6 +229,10 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
   async function reindex() {
+    if (!utils.permission.has(['plugin:obsidian-core:manage'])) {
+      await load()
+      return
+    }
     if (reindexing.value) return
     if (pollTimer) clearInterval(pollTimer)
     reindexing.value = true
@@ -310,7 +315,7 @@
       </div>
 
       <div v-if="!panelOpen" class="absolute right-3 top-3 z-[5]" :class="pillClass">
-        <GraphActionIcon :label="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'" :dark="visual.dark" :disabled="reindexing"
+        <GraphActionIcon :label="!utils.permission.has(['plugin:obsidian-core:manage']) ? '刷新图谱' : reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'" :dark="visual.dark" :disabled="reindexing"
           :busy="reindexing" bare @activate="reindex">
           <IconRefreshLine :class="{ 'animate-spin': reindexing }" />
         </GraphActionIcon>
@@ -327,7 +332,7 @@
 
       <aside v-else :class="panelClass">
         <div class="flex items-center justify-end gap-1.5 px-2.5 pb-1 pt-2">
-          <GraphActionIcon :label="reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'" :dark="visual.dark" :disabled="reindexing"
+          <GraphActionIcon :label="!utils.permission.has(['plugin:obsidian-core:manage']) ? '刷新图谱' : reindexing ? '正在重建双链索引' : '重新索引并刷新图谱'" :dark="visual.dark" :disabled="reindexing"
             :busy="reindexing" @activate="reindex">
             <IconRefreshLine :class="{ 'animate-spin': reindexing }" />
           </GraphActionIcon>

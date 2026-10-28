@@ -4,6 +4,10 @@ import { defineComponent, h } from 'vue'
 const calls = vi.hoisted(() => ({
   replay: vi.fn(),
   reindex: vi.fn().mockResolvedValue({ data: true }),
+  hasPermission: vi.fn().mockReturnValue(true),
+}))
+vi.mock('@halo-dev/ui-shared', () => ({
+  utils: { permission: { has: calls.hasPermission } },
 }))
 vi.mock('@halo-dev/components', () => {
   const icon = defineComponent({ setup: () => () => h('svg') })
@@ -53,6 +57,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 it('starts collapsed and exposes uniformly sized standalone icon actions', async () => {
+  calls.hasPermission.mockReturnValue(true)
   wrapper = mount(GraphView, {
     global: {
       stubs: { FormKit: true },
@@ -82,4 +87,16 @@ it('starts collapsed and exposes uniformly sized standalone icon actions', async
   expect(wrapper.find('aside').exists()).toBe(true)
   await wrapper.get('[aria-label="收起面板"]').trigger('click')
   expect(wrapper.find('aside').exists()).toBe(false)
+})
+
+it('only refreshes the graph for read-only users without calling the indexing endpoint', async () => {
+  calls.hasPermission.mockReturnValue(false)
+  wrapper = mount(GraphView, {
+    global: { stubs: { FormKit: true }, directives: { tooltip: () => {} } },
+  })
+  await flushPromises()
+  expect(wrapper.find('[aria-label="重新索引并刷新图谱"]').exists()).toBe(false)
+  await wrapper.get('[aria-label="刷新图谱"]').trigger('click')
+  await flushPromises()
+  expect(calls.reindex).not.toHaveBeenCalled()
 })

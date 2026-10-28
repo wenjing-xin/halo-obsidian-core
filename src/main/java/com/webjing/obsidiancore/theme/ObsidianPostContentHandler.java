@@ -45,11 +45,11 @@ public class ObsidianPostContentHandler implements ReactivePostContentHandler {
 
     private PostContentContext apply(PostContentContext context, boolean hasWikilinks) {
         String content = context.getContent();
-        content = StructuredLinkHtmlProcessor.render(content, linkCache::lookupByName);
+        content = StructuredLinkHtmlProcessor.render(content, linkCache::lookupPublicByName);
         if (hasWikilinks) {
             boolean caseSensitive = settings.isCaseSensitive();
             content = WikiLinkHtmlProcessor.replace(content,
-                title -> linkCache.lookup(title, caseSensitive),
+                title -> linkCache.lookupPublic(title, caseSensitive),
                 settings.isRenderBrokenLinks());
         }
         context.setContent(content);

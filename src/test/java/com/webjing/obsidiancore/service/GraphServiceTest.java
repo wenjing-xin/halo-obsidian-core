@@ -8,6 +8,7 @@ import com.webjing.obsidiancore.config.ObsidianSettings;
 import com.webjing.obsidiancore.dto.GraphModels.GraphNode;
 import com.webjing.obsidiancore.model.WikiLink;
 import com.webjing.obsidiancore.service.impl.GraphServiceImpl;
+import com.webjing.obsidiancore.service.impl.PublicGraphCache;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +24,8 @@ import run.halo.app.extension.ReactiveExtensionClient;
 class GraphServiceTest {
     private final ReactiveExtensionClient client = mock(ReactiveExtensionClient.class);
     private final ObsidianSettings settings = new ObsidianSettings();
-    private final GraphService service = new GraphServiceImpl(client, settings);
+    private final PublicGraphCache publicCache = new PublicGraphCache();
+    private final GraphService service = new GraphServiceImpl(client, settings, publicCache);
 
     @BeforeEach
     void setup() {
@@ -108,6 +110,33 @@ class GraphServiceTest {
         assertThat(graph.nodes()).extracting(GraphNode::id).containsExactly("c");
         assertThat(graph.edges()).isEmpty();
         assertThat(graph.truncated()).isTrue();
+    }
+
+    @Test
+    void repeatedPublicQueriesReuseTheCacheButAuthenticatedPreviewsDoNot() {
+        var query = query("full", null, Set.of(), 1);
+        service.buildPublicGraph(query).block();
+        service.buildPublicGraph(query).block();
+        verify(client, times(1)).listAll(eq(Post.class), any(), any());
+        service.buildConsoleGraphPreview(query).block();
+        service.buildConsoleGraphPreview(query).block();
+        verify(client, times(3)).listAll(eq(Post.class), any(), any());
+        publicCache.invalidate();
+        service.buildPublicGraph(query).block();
+        verify(client, times(4)).listAll(eq(Post.class), any(), any());
+    }
+
+    @Test
+    void settingChangesProduceNewPublicPayloadAndBrokenTitlesStayConsoleOnly() {
+        var broken = link("a", "b");
+        broken.getSpec().setUnresolvedTitles(Set.of("Private article title"));
+        when(client.listAll(eq(WikiLink.class), any(), any())).thenReturn(Flux.just(broken));
+        var query = new GraphService.PublicGraphQuery("full", null, Set.of(), 1, true, false);
+        assertThat(service.buildPublicGraph(query).block().brokenNodes()).isEmpty();
+        assertThat(service.buildConsoleGraphPreview(query).block().brokenNodes())
+            .extracting(GraphNode::title).containsExactly("Private article title");
+        settings.setGraphMaxNodes(1);
+        assertThat(service.buildPublicGraph(query).block().nodes()).hasSize(1);
     }
 
     private GraphService.PublicGraphQuery query(String mode, String post, Set<String> nodes, int depth) {

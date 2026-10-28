@@ -8,6 +8,7 @@ import com.webjing.obsidiancore.dto.GraphModels.GraphPayload;
 import com.webjing.obsidiancore.dto.GraphModels.NodeType;
 import com.webjing.obsidiancore.model.WikiLink;
 import com.webjing.obsidiancore.service.GraphService;
+import com.webjing.obsidiancore.service.PublicPostVisibility;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,6 +60,8 @@ public class GraphServiceImpl implements GraphService {
 
     private final ObsidianSettings settings;
 
+    private final PublicGraphCache publicCache;
+
     @Override
     public Mono<GraphPayload> buildConsoleGraph(GraphQuery query) {
         return buildGraph(query, false, null, null, 0);
@@ -66,7 +69,17 @@ public class GraphServiceImpl implements GraphService {
 
     @Override
     public Mono<GraphPayload> buildPublicGraph(PublicGraphQuery query) {
-        return buildScopedGraph(query, true);
+        return Mono.defer(() -> {
+            // Canonical, immutable keys avoid mutation and redundant entries for equivalent scopes.
+            var normalized = new PublicGraphQuery(query.mode() == null ? "full" : query.mode(),
+                query.post(), query.nodes() == null ? Set.of() : Set.copyOf(query.nodes()),
+                Math.min(Math.max(query.depth(), 1), MAX_DEPTH),
+                false, query.showTaxonomy());
+            var key = new PublicGraphCache.Key(normalized, settings.getGraphMaxNodes(),
+                Set.copyOf(settings.getExcludeCategories()), Set.copyOf(settings.getExcludeTags()));
+            // Anonymous graphs never expose unresolved titles (which may name private articles).
+            return publicCache.get(key, () -> buildScopedGraph(normalized, true));
+        });
     }
 
     @Override
@@ -154,8 +167,7 @@ public class GraphServiceImpl implements GraphService {
             var spec = post.getSpec();
             boolean released = spec.getReleaseSnapshot() != null
                 && !spec.getReleaseSnapshot().isBlank();
-            if (publicOnly && (!Post.isPublic(spec)
-                || !Boolean.TRUE.equals(spec.getPublish()) || !released)) {
+            if (publicOnly && !PublicPostVisibility.isVisible(post)) {
                 continue;
             }
             if (!publicOnly && !query.includeDraft() && !released) {

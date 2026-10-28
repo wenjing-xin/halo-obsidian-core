@@ -65,4 +65,17 @@ class ObsidianCorePluginTest {
         verify(settingFetcher, org.mockito.Mockito.times(2))
             .getSettingValue(ObsidianSettings.SETTING_GROUP);
     }
+
+    @Test
+    void configurationReadFailureClosesAnonymousAccess() {
+        var settings = new ObsidianSettings();
+        settings.setAllowAnonymousGraph(true);
+        when(settingFetcher.getSettingValue(ObsidianSettings.SETTING_GROUP))
+            .thenThrow(new IllegalStateException("configuration unavailable"));
+        var plugin = new ObsidianCorePlugin(context, schemeManager, settingFetcher, settings,
+            mock(ReindexService.class));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> plugin.onConfigUpdated(null))
+            .isInstanceOf(IllegalStateException.class);
+        assertThat(settings.isAllowAnonymousGraph()).isFalse();
+    }
 }

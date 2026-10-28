@@ -57,7 +57,9 @@ public class ObsidianPublicEndpoint implements CustomEndpoint {
             request.queryParam("depth").map(Integer::parseInt).orElse(1),
             request.queryParam("showBroken").map(Boolean::parseBoolean).orElse(false),
             request.queryParam("showTaxonomy").map(Boolean::parseBoolean).orElse(true));
-        return ServerResponse.ok().body(graphService.buildPublicGraph(query), GraphPayload.class);
+        // Server-side caching must not let browsers/CDNs retain data after a post becomes private.
+        return ServerResponse.ok().header("Cache-Control", "no-store")
+            .body(graphService.buildPublicGraph(query), GraphPayload.class);
     }
 
     private Set<String> csvSet(ServerRequest request, String param) {

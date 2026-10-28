@@ -26,7 +26,7 @@ public class ObsidianSettings {
     private boolean renderWikilinks = true;
     private boolean caseSensitive = false;
     private boolean renderBrokenLinks = false;
-    private boolean allowAnonymousGraph = false;
+    private volatile boolean allowAnonymousGraph = false;
     private String anonymousGraphDefaultMode = "full";
     private boolean graphDefaultShowTaxonomy = true;
     private boolean graphDefaultCollapseCategories = false;
@@ -41,6 +41,7 @@ public class ObsidianSettings {
      */
     public void update(JsonNode json) {
         if (json == null) {
+            this.allowAnonymousGraph = false;
             return;
         }
         this.renderWikilinks = json.path("renderWikilinks").asBoolean(true);

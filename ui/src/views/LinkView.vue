@@ -3,6 +3,7 @@ import { VAlert, VButton, VCard, VEmpty, VLoading, VTabbar } from '@halo-dev/com
 import { IconRefreshLine, IconDashboard, IconLink, IconErrorWarning } from '@halo-dev/components'
 import { FormKit } from '@formkit/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { utils } from '@halo-dev/ui-shared'
 import {
   fetchBacklinks,
   fetchOutgoing,
@@ -155,6 +156,7 @@ async function selectPost(post: PostBrief) {
 }
 
 async function reindex() {
+  if (!utils.permission.has(['plugin:obsidian-core:manage'])) return
   if (pollTimer) clearInterval(pollTimer)
   reindexing.value = true
   try {
@@ -301,15 +303,17 @@ const statCards = computed(() => [
             : '发布或更新文章后自动同步；历史数据可手动重新索引。'
         }}
       </p>
-      <VButton
-        :loading="reindexing || summary?.reindexing"
-        type="secondary"
-        size="sm"
-        @click="reindex"
-      >
-        <template #icon><IconRefreshLine /></template>
-        {{ reindexing ? '索引中…' : '重新索引' }}
-      </VButton>
+      <HasPermission :permissions="['plugin:obsidian-core:manage']">
+        <VButton
+          :loading="reindexing || summary?.reindexing"
+          type="secondary"
+          size="sm"
+          @click="reindex"
+        >
+          <template #icon><IconRefreshLine /></template>
+          {{ reindexing ? '索引中…' : '重新索引' }}
+        </VButton>
+      </HasPermission>
     </div>
 
     <VTabbar

@@ -15,11 +15,27 @@ import run.halo.app.theme.ReactivePostContentHandler.PostContentContext;
 
 class ObsidianPostContentHandlerTest {
     @Test
+    void privatePostLinksNeverFallBackToStoredUrlsOrAuthenticatedTargets() {
+        var cache = mock(PostLinkIndexCache.class);
+        when(cache.warmup()).thenReturn(Mono.empty());
+        when(cache.lookupPublicByName("private")).thenReturn(Optional.empty());
+        when(cache.lookupPublic("Secret", false)).thenReturn(Optional.empty());
+        var context = PostContentContext.builder().content("""
+            <p><obsidian-core-link post="private" url="/secret" title="Secret">Alias</obsidian-core-link> [[Secret]]</p>
+            """).build();
+        var result = new ObsidianPostContentHandler(cache, new ObsidianSettings())
+            .handle(context).block().getContent();
+        assertThat(result).contains("aria-disabled=\"true\"").doesNotContain("href=", "/secret");
+        verify(cache, never()).lookupByName(any());
+        verify(cache, never()).lookup(any(), anyBoolean());
+    }
+
+    @Test
     void newTagRendersAfterWarmupWithoutGraphOrLegacySyntaxEnabled() {
         var cache = mock(PostLinkIndexCache.class);
         var loaded = new AtomicBoolean();
         when(cache.warmup()).thenReturn(Mono.fromRunnable(() -> loaded.set(true)));
-        when(cache.lookupByName("p1")).thenAnswer(call -> loaded.get()
+        when(cache.lookupPublicByName("p1")).thenAnswer(call -> loaded.get()
             ? Optional.of(new PostLinkIndexCache.PostTarget("p1", "Renamed", "/current"))
             : Optional.empty());
         var settings = new ObsidianSettings();
@@ -38,7 +54,7 @@ class ObsidianPostContentHandlerTest {
         var cache = mock(PostLinkIndexCache.class);
         var loaded = new AtomicBoolean();
         when(cache.warmup()).thenReturn(Mono.fromRunnable(() -> loaded.set(true)));
-        when(cache.lookup("Target", false)).thenAnswer(call -> loaded.get()
+        when(cache.lookupPublic("Target", false)).thenAnswer(call -> loaded.get()
             ? Optional.of(new PostLinkIndexCache.PostTarget("target", "Target", "/target"))
             : Optional.empty());
         var handler = new ObsidianPostContentHandler(cache, new ObsidianSettings());
@@ -63,7 +79,7 @@ class ObsidianPostContentHandlerTest {
     void markdownEscapedTagsAreDetectedWithoutLegacySyntaxOrAnonymousGraph() {
         var cache = mock(PostLinkIndexCache.class);
         when(cache.warmup()).thenReturn(Mono.empty());
-        when(cache.lookupByName("p1")).thenReturn(Optional.of(
+        when(cache.lookupPublicByName("p1")).thenReturn(Optional.of(
             new PostLinkIndexCache.PostTarget("p1", "Article", "/current")));
         var settings = new ObsidianSettings();
         settings.setRenderWikilinks(false);

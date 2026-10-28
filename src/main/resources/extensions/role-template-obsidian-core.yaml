@@ -1,0 +1,37 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: obsidian-core-role-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "Halo 知链"
+    rbac.authorization.halo.run/display-name: "知链查看"
+    rbac.authorization.halo.run/ui-permissions: '["plugin:obsidian-core:view"]'
+rules:
+  - apiGroups: ["console.api.obsidian-core.halo.run"]
+    resources: ["graph", "backlinks", "outgoing", "unresolved", "summary"]
+    verbs: ["get", "list"]
+  # The graph filters and article picker need only taxonomy/article metadata.
+  - apiGroups: ["content.halo.run"]
+    resources: ["categories", "tags"]
+    verbs: ["get", "list"]
+  - apiGroups: ["api.console.halo.run"]
+    resources: ["posts"]
+    verbs: ["get", "list"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: obsidian-core-role-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "Halo 知链"
+    rbac.authorization.halo.run/display-name: "知链管理"
+    rbac.authorization.halo.run/dependencies: '["obsidian-core-role-view"]'
+    rbac.authorization.halo.run/ui-permissions: '["plugin:obsidian-core:manage"]'
+rules:
+  - apiGroups: ["console.api.obsidian-core.halo.run"]
+    resources: ["reindex"]
+    verbs: ["create"]

@@ -1,11 +1,14 @@
 package com.webjing.obsidiancore.index;
 
+import com.webjing.obsidiancore.service.PublicPostVisibility;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
@@ -41,9 +44,13 @@ public class PostLinkIndexCache {
 
     private volatile Map<String, PostTarget> byPostName = Map.of();
 
+    private Set<String> publicPostNames = Set.of();
+
     private volatile Instant loadedAt = null;
 
     private volatile Mono<Void> loading = null;
+
+    private long generation;
 
     /**
      * Target info of a resolvable post.
@@ -94,12 +101,33 @@ public class PostLinkIndexCache {
         return Optional.ofNullable(byPostName.get(postName));
     }
 
+    /** Theme rendering must not use the broader authenticated indexer's target set. */
+    public Optional<PostTarget> lookupPublic(String title, boolean caseSensitive) {
+        synchronized (lock) {
+            return lookup(title, caseSensitive)
+                .filter(target -> publicPostNames.contains(target.postName()));
+        }
+    }
+
+    public Optional<PostTarget> lookupPublicByName(String postName) {
+        synchronized (lock) {
+            return lookupByName(postName)
+                .filter(target -> publicPostNames.contains(target.postName()));
+        }
+    }
+
     /**
      * Invalidate the cache; next access reloads from the extension store.
      */
     public void invalidate() {
         synchronized (lock) {
+            generation++;
             loadedAt = null;
+            loading = null;
+            byTitle = Map.of();
+            byLowerCaseTitle = Map.of();
+            byPostName = Map.of();
+            publicPostNames = Set.of();
         }
     }
 
@@ -119,34 +147,49 @@ public class PostLinkIndexCache {
             if (loading != null) {
                 return loading;
             }
-            this.loading = load()
+            long version = generation;
+            this.loading = load(version)
                 .doOnSuccess(ignored -> {
                     synchronized (lock) {
-                        this.loadedAt = Instant.now();
-                        this.loading = null;
+                        if (generation == version) {
+                            this.loadedAt = Instant.now();
+                            this.loading = null;
+                        }
                     }
                 })
-                .onErrorResume(e -> {
+                .doOnError(e -> {
                     log.error("Failed to load post link index cache", e);
                     synchronized (lock) {
-                        this.loading = null;
+                        if (generation == version) {
+                            this.loading = null;
+                            byTitle = Map.of();
+                            byLowerCaseTitle = Map.of();
+                            byPostName = Map.of();
+                            publicPostNames = Set.of();
+                        }
                     }
-                    return Mono.empty();
                 })
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
-                .then();
+                .cache()
+                // An invalidation during an in-flight load must not republish stale private data.
+                .then(Mono.defer(() -> {
+                    synchronized (lock) {
+                        return generation == version ? Mono.empty() : ensureLoaded();
+                    }
+                }));
             return loading;
         }
     }
 
-    private Mono<Void> load() {
+    private Mono<Void> load(long version) {
         return client.listAll(Post.class,
                 new ListOptions().setFieldSelector(FieldSelector.all()),
                 Sort.unsorted())
             .filter(post -> {
                 var spec = post.getSpec();
-                if (spec == null || Boolean.TRUE.equals(spec.getDeleted())
-                    || !Boolean.TRUE.equals(spec.getPublish())) {
+                if (spec == null || post.getMetadata() == null || post.isDeleted()
+                    || !Boolean.TRUE.equals(spec.getPublish())
+                    || spec.getReleaseSnapshot() == null || spec.getReleaseSnapshot().isBlank()) {
                     return false;
                 }
                 var title = spec.getTitle();
@@ -172,9 +215,14 @@ public class PostLinkIndexCache {
                     byName.put(post.getMetadata().getName(), target);
                 }
                 synchronized (lock) {
-                    this.byTitle = byTitleMap;
-                    this.byLowerCaseTitle = lower;
-                    this.byPostName = byName;
+                    if (generation == version) {
+                        this.byTitle = byTitleMap;
+                        this.byLowerCaseTitle = lower;
+                        this.byPostName = byName;
+                        this.publicPostNames = posts.stream().filter(PublicPostVisibility::isVisible)
+                            .map(post -> post.getMetadata().getName())
+                            .collect(Collectors.toUnmodifiableSet());
+                    }
                 }
                 log.debug("PostLinkIndexCache loaded {} posts", posts.size());
             })
