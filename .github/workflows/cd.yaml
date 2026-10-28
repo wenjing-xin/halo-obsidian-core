@@ -15,7 +15,8 @@ jobs:
       contents: write
     with:
       ui-path: "ui"
-      pnpm-version: ""
+      # pnpm setup runs at the repository root; packageManager is in ui/package.json.
+      pnpm-version: "10.33.0"
       node-version: "24"
       java-version: "21"
       app-id: app-zpu0pwze

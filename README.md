@@ -175,8 +175,6 @@ ui/widget/src/                        主题端 Lit Web Component
 docs/                                 使用说明
 ```
 
-
-
 ## 许可证
 
 [GPL-3.0](https://github.com/wenjing-xin/halo-obsidian-core/blob/main/LICENSE) © webjing
